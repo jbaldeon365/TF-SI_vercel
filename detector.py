@@ -5,10 +5,16 @@ import re
 import os
 import imutils
 import platform
-import urllib.request
-import shutil
+import time
 
-# --- DETECCIÓN DE SISTEMA OPERATIVO ---
+# ============================================================
+#  CONFIG: Usar el modelo empaquetado dentro del contenedor
+# ============================================================
+
+# Ruta del archivo best_3.pt dentro del proyecto (copiado por Docker)
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_1.pt")
+
+# Directorio temporal para Cloud Run
 if platform.system() == "Windows":
     TEMP_DIR = os.path.join(os.environ.get('TEMP', 'temp'), 'tf_si_plates')
 else:
@@ -16,79 +22,34 @@ else:
 
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+# ============================================================
+#  CARGA DE MODELOS
+# ============================================================
 
-def _download_file(url, dest_path, chunk_size=8192):
-    try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
-            total = resp.getheader('Content-Length')
-            if total is not None:
-                total = int(total)
-            with open(dest_path + '.part', 'wb') as out:
-                shutil.copyfileobj(resp, out)
-        os.replace(dest_path + '.part', dest_path)
-        print(f"Downloaded model to {dest_path}")
-        return True
-    except Exception as e:
-        if os.path.exists(dest_path + '.part'):
-            try:
-                os.remove(dest_path + '.part')
-            except Exception:
-                pass
-        print(f"Model download failed: {e}")
-        return False
-
-
-def ensure_model_file(model_filename):
-    """Ensure the model file exists locally. If not, try to download it.
-
-    Lookup order for URL:
-      1. Environment variable named `MODEL_URL_<UPPER_BASENAME>` (dots replaced by _)
-      2. Environment variable `MODEL_URL`
-
-    The function writes the file to the current working directory or to
-    `MODEL_DIR` if set in env.
-    """
-    model_dir = os.environ.get('MODEL_DIR', '.')
-    os.makedirs(model_dir, exist_ok=True)
-    dest_path = os.path.join(model_dir, model_filename)
-
-    if os.path.exists(dest_path):
-        print(f"Model already present at {dest_path}")
-        return dest_path
-
-    base = os.path.splitext(model_filename)[0]
-    env_name = f"MODEL_URL_{base.upper().replace('.', '_').replace('-', '_')}"
-    url = os.environ.get(env_name) or os.environ.get('MODEL_URL')
-
-    if not url:
-        raise FileNotFoundError(
-            f"Model file '{model_filename}' not found and no MODEL_URL provided (tried {env_name} and MODEL_URL)."
-        )
-
-    print(f"Attempting to download model from: {url}")
-    ok = _download_file(url, dest_path)
-    if not ok:
-        raise RuntimeError(f"Failed to download model from {url}")
-
-    return dest_path
-
-
-# Ensure the model file is present (will use env vars to download if needed)
-MODEL_FILENAME = os.environ.get('MODEL_FILENAME', 'best_3.pt')
-MODEL_PATH = ensure_model_file(MODEL_FILENAME)
-
-# Load the YOLO model from the ensured path
+# Modelo YOLO LOCAL — ya no descarga nada
 model = YOLO(MODEL_PATH)
-# --- CAMBIO: cls=True va en el constructor, no en ocr() ---
+
+# OCR con clasificación de ángulos
 ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
+
+# ============================================================
+#  FUNCIÓN PRINCIPAL DE DETECCIÓN
+# ============================================================
+
+
+
+
 def detect_plate(image_path):
+    
+    start = time.time()
+    
     image = cv2.imread(image_path)
     if image is None:
         print(f"Error: No se pudo leer la imagen en {image_path}")
         return [], None
     
-    results = model(image)
+    results = model(image)  # YOLO inference
     plate_texts = []
 
     print(f"[detect_plate] model returned {len(results)} result(s)")
@@ -106,14 +67,15 @@ def detect_plate(image_path):
         return strs
 
     for r_i, result in enumerate(results):
+
+        # Manejar detecciones YOLO de forma segura
         try:
             index_plates = (result.boxes.cls == 0).nonzero(as_tuple=True)[0]
         except Exception:
-            # fallback: if boxes or cls not present, try to iterate all boxes
             try:
                 num_boxes = len(result.boxes.xyxy)
                 index_plates = list(range(num_boxes))
-            except Exception:
+            except:
                 index_plates = []
 
         print(f"[detect_plate] result {r_i}: candidate indices {list(index_plates)}")
@@ -121,87 +83,110 @@ def detect_plate(image_path):
         for idx in index_plates:
             try:
                 conf = float(result.boxes.conf[idx].item())
-            except Exception:
-                # if confidence not available, accept
+            except:
                 conf = 1.0
 
             if conf <= 0.05:
-                print(f"[detect_plate] skipping idx {idx} due confidence {conf}")
                 continue
 
+            # Obtener bounding box
             try:
                 xyxy = result.boxes.xyxy[idx].squeeze().tolist()
                 x1, y1, x2, y2 = map(int, xyxy)
-            except Exception:
-                print(f"[detect_plate] invalid bbox for idx {idx}")
+            except:
                 continue
 
+            # Expandir bbox ligeramente
             y1p, y2p = max(y1 - 10, 0), y2 + 10
             x1p, x2p = max(x1 - 10, 0), x2 + 10
             plate_img = image[y1p:y2p, x1p:x2p]
 
             if plate_img.size == 0:
-                print(f"[detect_plate] empty crop for idx {idx}")
                 continue
 
+            # OCR
             try:
                 ocr_input = cv2.cvtColor(plate_img, cv2.COLOR_BGR2RGB)
                 result_ocr = ocr.ocr(ocr_input)
             except Exception as e:
-                print(f"[detect_plate] OCR error for idx {idx}: {e}")
+                print(f"[detect_plate] OCR error: {e}")
                 result_ocr = None
-
-            print(f"[detect_plate] OCR raw result for idx {idx}: {result_ocr}")
 
             if not result_ocr:
                 continue
 
-            # collect all text-like strings from OCR result
-            texts = _collect_strings(result_ocr)
-            raw_text = ''.join(texts)
-            clean_text = re.sub(r'[^A-Z0-9]', '', raw_text.upper())
+            # Extraer segmentos de texto del resultado OCR de forma robusta
+            def _extract_segments(obj):
+                segs = []
+                if isinstance(obj, str):
+                    segs.append(obj)
+                elif isinstance(obj, tuple) and len(obj) > 0 and isinstance(obj[0], str):
+                    segs.append(obj[0])
+                elif isinstance(obj, (list, tuple)):
+                    for x in obj:
+                        segs.extend(_extract_segments(x))
+                elif isinstance(obj, dict):
+                    for v in obj.values():
+                        segs.extend(_extract_segments(v))
+                return segs
 
-            # try strict match first, then permissive
-            match = re.search(r'[A-Z]{2,3}\d{3,4}', clean_text)
-            if match:
-                output_text = match.group()
-                plate_texts.append(output_text)
-                chosen_reason = 'regex'
+            segments = _extract_segments(result_ocr)
+
+            # Limpiar cada segmento y crear lista de candidatos
+            cleaned_segs = [re.sub(r'[^A-Z0-9]', '', s.upper()) for s in segments if isinstance(s, str) and s.strip()]
+
+            # Buscar coincidencias estrictas primero (ej. 2-3 letras + 3-4 dígitos)
+            strict_matches = []
+            for s in cleaned_segs:
+                m = re.search(r'[A-Z]{2,3}\d{3,4}', s)
+                if m:
+                    strict_matches.append(m.group())
+
+            if strict_matches:
+                output_text = strict_matches[0]
             else:
-                # permissive fallback: accept if length>=4 and contains a digit
-                if len(clean_text) >= 4 and re.search(r'\d', clean_text):
-                    output_text = clean_text
-                    plate_texts.append(output_text)
-                    chosen_reason = 'fallback'
+                # Si no hay coincidencia estricta, elegir el mejor candidato
+                # Criterio: contiene letras y números, longitud entre 4 y 8; preferir más dígitos
+                candidates = [s for s in cleaned_segs if 4 <= len(s) <= 12 and re.search(r'\d', s) and re.search(r'[A-Z]', s)]
+                if candidates:
+                    # preferir el candidato con mayor número de dígitos, si empate, el más corto
+                    def score_candidate(x):
+                        return (sum(c.isdigit() for c in x), -len(x))
+                    candidates.sort(key=score_candidate, reverse=True)
+                    output_text = candidates[0]
                 else:
-                    print(f"[detect_plate] OCR produced no valid plate for idx {idx}: raw='{raw_text}' cleaned='{clean_text}'")
-                    continue
+                    # último recurso: concatena y usa substring más razonable
+                    raw_text = ' '.join(cleaned_segs)
+                    # extraer cualquier substring alfanumérica larga
+                    parts = re.findall(r'[A-Z0-9]{4,12}', raw_text)
+                    parts = [p for p in parts if re.search(r'\d', p)]
+                    output_text = parts[-1] if parts else raw_text
 
-            print(f"[detect_plate] accepted plate '{output_text}' (reason={chosen_reason}, conf={conf})")
+            print(f"[detect_plate] ocr segments={cleaned_segs} -> chosen='{output_text}'")
+            plate_texts.append(output_text)
 
-            # draw annotation on the image
+            # Dibujar en la imagen
             try:
                 cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(image, output_text, (x1, max(y1 - 10, 10)),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
-            except Exception as e:
-                print(f"[detect_plate] drawing error: {e}")
+            except:
+                pass
 
-    # resize annotated image before saving
+    # Redimensionar y guardar anotación
     try:
         image = imutils.resize(image, width=720)
-    except Exception:
+    except:
         pass
 
     input_filename = os.path.basename(image_path)
     annotated_filename = f"annotated_{input_filename}"
     annotated_path = os.path.join(TEMP_DIR, annotated_filename)
 
-    try:
-        cv2.imwrite(annotated_path, image)
-    except Exception as e:
-        print(f"Error al guardar la imagen anotada: {e}")
-        return plate_texts, None
+    cv2.imwrite(annotated_path, image)
+    end = time.time()
+    print("Tiempo total:", round(end - start, 3), "segundos")
 
-    print(f"[detect_plate] returning {len(plate_texts)} plate(s): {plate_texts}, annotated: {annotated_path}")
     return plate_texts, annotated_path
+
+
