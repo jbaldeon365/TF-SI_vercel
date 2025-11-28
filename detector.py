@@ -11,8 +11,7 @@ import time
 #  CONFIG: Usar el modelo empaquetado dentro del contenedor
 # ============================================================
 
-# Ruta del archivo best_3.pt dentro del proyecto (copiado por Docker)
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_1.pt")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_3.pt")
 
 # Directorio temporal para Cloud Run
 if platform.system() == "Windows":
