@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Detección de Placas - Perú</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>🚗 Detección de Placas - Perú</h1>
+  </header>
+
+  <main>
+    <div class="upload-card">
+      <p>Sube una imagen para identificar la placa del vehículo.</p>
+      <input type="file" id="fileInput" accept="image/*">
+      <button onclick="upload()">Subir y detectar</button>
+      <div class="loader" id="loader"></div>
+      <div id="result"></div>
+    </div>
+
+    <div class="image-container">
+      <div class="image-box">
+        <h3>Imagen Original</h3>
+        <img id="preview" style="display:none;">
+      </div>
+      <div class="image-box">
+        <h3>Resultado Detectado</h3>
+        <img id="annotated" style="display:none;">
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Proyecto YOLOv11 - Detección de Placas © 2025
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "vehiculos": [
+    {
+      "placa": "BHI941",
+      "marca": "DFSK",
+      "modelo": "C35",
+      "color": "Blanco",
+      "estado": "robado",
+      "descripcion": "Reportado como robado en Lima el 02/11/2025"
+    },
+    {
+      "placa": "CHN547",
+      "marca": "DFSK",
+      "modelo": "C37",
+      "color": "Blanco",
+      "estado": "sospechoso",
+      "descripcion": "Visto rondando zonas restringidas"
+    },
+    {
+      "placa": "ABC-123",
+      "marca": "Toyota",
+      "modelo": "Yaris",
+      "color": "Rojo",
+      "estado": "denunciado",
+      "descripcion": "Usado en robo a mano armada, posible placa clonada"
+    },
+    {
+      "placa": "ZRT-568",
+      "marca": "Hyundai",
+      "modelo": "Tucson",
+      "color": "Negro",
+      "estado": "normal",
+      "descripcion": "Vehículo sin incidentes"
+    }
+  ]
+}
