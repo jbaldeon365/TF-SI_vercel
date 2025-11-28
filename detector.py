@@ -5,18 +5,14 @@ import re
 import os
 import imutils
 import platform
-<<<<<<< HEAD
 import urllib.request
 import shutil
-=======
->>>>>>> a5e654fb5250fa0eca7a77474f534611035c4491
 
 # --- DETECCIÓN DE SISTEMA OPERATIVO ---
 if platform.system() == "Windows":
     TEMP_DIR = os.path.join(os.environ.get('TEMP', 'temp'), 'tf_si_plates')
 else:
     TEMP_DIR = "/tmp/tf_si_plates"
-<<<<<<< HEAD
 
 os.makedirs(TEMP_DIR, exist_ok=True)
 
@@ -83,12 +79,6 @@ MODEL_PATH = ensure_model_file(MODEL_FILENAME)
 
 # Load the YOLO model from the ensured path
 model = YOLO(MODEL_PATH)
-=======
-
-os.makedirs(TEMP_DIR, exist_ok=True)
-
-model = YOLO("best_3.pt")
->>>>>>> a5e654fb5250fa0eca7a77474f534611035c4491
 # --- CAMBIO: cls=True va en el constructor, no en ocr() ---
 ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
