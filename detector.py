@@ -7,10 +7,8 @@ import imutils
 import platform
 import time
 
-# ============================================================
-#  CONFIG: Usar el modelo empaquetado dentro del contenedor
-# ============================================================
 
+#  CONFIG: Usar el modelo empaquetado dentro del contenedor
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_3.pt")
 
 # Directorio temporal para Cloud Run
@@ -21,10 +19,7 @@ else:
 
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# ============================================================
 #  CARGA DE MODELOS
-# ============================================================
-
 # Modelo YOLO LOCAL — ya no descarga nada
 model = YOLO(MODEL_PATH)
 
@@ -32,12 +27,8 @@ model = YOLO(MODEL_PATH)
 ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
 
-# ============================================================
+
 #  FUNCIÓN PRINCIPAL DE DETECCIÓN
-# ============================================================
-
-
-
 
 def detect_plate(image_path):
     
