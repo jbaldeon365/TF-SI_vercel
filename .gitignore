@@ -1,0 +1,15 @@
+# Entorno y caché
+venv/
+__pycache__/
+*.pyc
+.vscode/
+
+# Fotos de prueba y resultados de evaluación (contienen vehículos y placas reales)
+Inputs/
+uploads/
+resultados/
+etiquetas.json
+
+# Modelos: solo se versiona el que usa el sistema
+*.pt
+!best_3.pt
