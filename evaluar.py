@@ -20,10 +20,10 @@ def exactitud_caracteres(real, leida):
 
 def evaluar_imagen(ruta, reales):
     inicio = time.time()
-    placas, _ = detect_plate(ruta)
+    detecciones, _, tiempos = detect_plate(ruta)
     tiempo = time.time() - inicio
 
-    leidas = [normalizar(p) for p in placas]
+    leidas = [normalizar(d["texto"]) for d in detecciones]
     detalle = []
     aciertos_usados = set()
 
@@ -41,7 +41,13 @@ def evaluar_imagen(ruta, reales):
 
     # Lecturas que no coinciden con ninguna placa etiquetada (pueden ser placas reales sin etiquetar)
     otras = [p for p in leidas if p not in aciertos_usados and p not in reales]
-    return {"placas": detalle, "otras_lecturas": otras, "tiempo_s": round(tiempo, 3)}
+    return {
+        "placas": detalle,
+        "otras_lecturas": otras,
+        "tiempo_s": round(tiempo, 3),
+        "yolo_ms": tiempos.get("yolo_ms"),
+        "ocr_ms": tiempos.get("ocr_ms"),
+    }
 
 
 def main():
@@ -81,6 +87,8 @@ def main():
         "exactitud_caracter": round(caracteres / total, 3) if total else 0,
         "otras_lecturas": otras,
         "tiempo_medio_s": round(tiempo_medio, 3),
+        "yolo_medio_ms": round(sum(r["yolo_ms"] for r in resultados.values()) / max(len(resultados), 1), 1),
+        "ocr_medio_ms": round(sum(r["ocr_ms"] for r in resultados.values()) / max(len(resultados), 1), 1),
     }
     print("\n=== Resumen ===")
     for clave, valor in resumen.items():

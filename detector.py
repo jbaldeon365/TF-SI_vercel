@@ -41,10 +41,13 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
     image = cv2.imread(image_path)
     if image is None:
         print(f"Error: No se pudo leer la imagen en {image_path}")
-        return [], None
+        return [], None, {}
     
+    t_yolo_ini = time.time()
     results = model(image, conf=conf_thres, iou=iou_thres)  # YOLO inference
-    plate_texts = []
+    t_yolo = time.time() - t_yolo_ini
+    t_ocr = 0.0
+    detecciones = []
 
     print(f"[detect_plate] model returned {len(results)} result(s)")
 
@@ -99,12 +102,14 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                 continue
 
             # OCR
+            t_ocr_ini = time.time()
             try:
                 ocr_input = cv2.cvtColor(plate_img, cv2.COLOR_BGR2RGB)
                 result_ocr = ocr.ocr(ocr_input)
             except Exception as e:
                 print(f"[detect_plate] OCR error: {e}")
                 result_ocr = None
+            t_ocr += time.time() - t_ocr_ini
 
             if not result_ocr:
                 continue
@@ -157,7 +162,12 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                     output_text = parts[-1] if parts else raw_text
 
             print(f"[detect_plate] ocr segments={cleaned_segs} -> chosen='{output_text}'")
-            plate_texts.append(output_text)
+            detecciones.append({
+                "texto": output_text,
+                "confianza": round(conf, 3),
+                "bbox": [x1, y1, x2, y2],
+                "segmentos": cleaned_segs,
+            })
 
             # Dibujar en la imagen
             try:
@@ -181,6 +191,11 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
     end = time.time()
     print("Tiempo total:", round(end - start, 3), "segundos")
 
-    return plate_texts, annotated_path
+    tiempos = {
+        "yolo_ms": round(t_yolo * 1000, 1),
+        "ocr_ms": round(t_ocr * 1000, 1),
+        "total_ms": round((end - start) * 1000, 1),
+    }
+    return detecciones, annotated_path, tiempos
 
 

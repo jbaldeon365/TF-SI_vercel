@@ -47,18 +47,19 @@ def upload_image():
             umbrales[campo] = valor
 
     try:
-        plates, annotated_path = detect_plate(filepath, **umbrales)
+        detecciones, annotated_path, tiempos = detect_plate(filepath, **umbrales)
     except Exception as e:
         print(f"Error durante la detección: {e}")
         return jsonify({"success": False, "error": f"Error interno durante la detección: {e}"})
 
-    if plates:
+    if detecciones:
         vehiculos = cargar_vehiculos()
         resultados = []
 
-        for p in plates:
-            p_upper = p.strip().upper()
-            validacion = validar_placa(p_upper)
+        for d in detecciones:
+            p_upper = d["texto"].strip().upper()
+            validacion = validar_placa(p_upper, d["segmentos"])
+            deteccion = {"confianza": d["confianza"], "bbox": d["bbox"]}
 
             if not validacion["valida"]:
                 if validacion["pais"].startswith("desconocido"):
@@ -71,7 +72,8 @@ def upload_image():
                     "pais": validacion["pais"],
                     "encontrado": False,
                     "estado": "invalida",
-                    "descripcion": descripcion
+                    "descripcion": descripcion,
+                    **deteccion
                 })
                 continue
 
@@ -86,7 +88,8 @@ def upload_image():
                     "marca": vehiculo["marca"],
                     "modelo": vehiculo["modelo"],
                     "color": vehiculo["color"],
-                    "descripcion": vehiculo["descripcion"]
+                    "descripcion": vehiculo["descripcion"],
+                    **deteccion
                 })
             else:
                 resultados.append({
@@ -95,7 +98,8 @@ def upload_image():
                     "pais": validacion["pais"],
                     "encontrado": False,
                     "estado": "desconocido",
-                    "descripcion": "No hay registro en la base local."
+                    "descripcion": "No hay registro en la base local.",
+                    **deteccion
                 })
 
         annotated_filename = os.path.basename(annotated_path) if annotated_path else None
@@ -103,7 +107,8 @@ def upload_image():
         return jsonify({
             "success": True,
             "resultados": resultados,
-            "annotated": f"/temp_files/{annotated_filename}" if annotated_filename else None
+            "tiempos": tiempos,
+            "annotated":f"/temp_files/{annotated_filename}" if annotated_filename else None
         })
 
     else:
