@@ -3,7 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 import json
 from detector import detect_plate, TEMP_DIR
-from placas import validar_placa
+from placas import normalizar_placa, validar_placa
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -81,7 +81,7 @@ def upload_image():
                 })
                 continue
 
-            vehiculo = next((v for v in vehiculos if v["placa"] == p_upper), None)
+            vehiculo = next((v for v in vehiculos if normalizar_placa(v["placa"]) == normalizar_placa(p_upper)), None)
             if vehiculo:
                 resultados.append({
                     "placa": p_upper,
