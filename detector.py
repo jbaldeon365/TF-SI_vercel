@@ -23,6 +23,11 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 CONF_THRES = float(os.environ.get("CONF_THRES", 0.25))
 IOU_THRES = float(os.environ.get("IOU_THRES", 0.7))
 
+# Forma y tamaño mínimo de un recuadro de placa (ancho / alto, píxeles)
+ASPECTO_MIN = 1.0
+ASPECTO_MAX = 6.5
+MIN_ANCHO_PLACA = 20
+
 #  CARGA DE MODELOS
 # Modelo YOLO LOCAL — ya no descarga nada
 model = YOLO(MODEL_PATH)
@@ -91,6 +96,11 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                 xyxy = result.boxes.xyxy[idx].squeeze().tolist()
                 x1, y1, x2, y2 = map(int, xyxy)
             except:
+                continue
+
+            # Descartar recuadros que no tienen forma ni tamaño de placa
+            ancho, alto = x2 - x1, y2 - y1
+            if alto <= 0 or ancho < MIN_ANCHO_PLACA or not (ASPECTO_MIN <= ancho / alto <= ASPECTO_MAX):
                 continue
 
             # Expandir bbox ligeramente
