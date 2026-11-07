@@ -1,0 +1,336 @@
+{
+  "resumen": {
+    "placas_etiquetadas": 26,
+    "placas_exactas": 19,
+    "exactitud_placa": 0.731,
+    "exactitud_caracter": 0.949,
+    "otras_lecturas": 13,
+    "tiempo_medio_s": 3.413,
+    "yolo_medio_ms": 586.0,
+    "ocr_medio_ms": 2731.5
+  },
+  "imagenes": {
+    "prueba1.jpg": {
+      "placas": [
+        {
+          "real": "T1Q000",
+          "leida": "T1O000",
+          "exacta": false,
+          "caracteres": 0.8333333333333334
+        }
+      ],
+      "otras_lecturas": [
+        "T1O000"
+      ],
+      "tiempo_s": 2.095,
+      "yolo_ms": 405.8,
+      "ocr_ms": 1659.4
+    },
+    "prueba2.jpeg": {
+      "placas": [
+        {
+          "real": "T4Y427",
+          "leida": "T4Y427",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [],
+      "tiempo_s": 2.352,
+      "yolo_ms": 610.7,
+      "ocr_ms": 1628.3
+    },
+    "prueba3.jpg": {
+      "placas": [
+        {
+          "real": "AMG224",
+          "leida": "ANG224",
+          "exacta": false,
+          "caracteres": 0.8333333333333334
+        }
+      ],
+      "otras_lecturas": [
+        "ANG224",
+        "MINGENERAL"
+      ],
+      "tiempo_s": 3.1,
+      "yolo_ms": 446.9,
+      "ocr_ms": 2643.9
+    },
+    "prueba4.jpg": {
+      "placas": [
+        {
+          "real": "AWD615",
+          "leida": "AWD615",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [],
+      "tiempo_s": 2.074,
+      "yolo_ms": 557.0,
+      "ocr_ms": 1498.9
+    },
+    "prueba5.jpg": {
+      "placas": [
+        {
+          "real": "A4F221",
+          "leida": "A4F21",
+          "exacta": false,
+          "caracteres": 0.6666666666666666
+        },
+        {
+          "real": "C9N368",
+          "leida": "C9N368",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [
+        "A4F21"
+      ],
+      "tiempo_s": 2.982,
+      "yolo_ms": 598.7,
+      "ocr_ms": 2355.0
+    },
+    "prueba6.jpg": {
+      "placas": [
+        {
+          "real": "T6Q205",
+          "leida": "T6O205",
+          "exacta": false,
+          "caracteres": 0.8333333333333334
+        }
+      ],
+      "otras_lecturas": [
+        "T6O205"
+      ],
+      "tiempo_s": 2.289,
+      "yolo_ms": 624.8,
+      "ocr_ms": 1530.3
+    },
+    "prueba7.jpg": {
+      "placas": [
+        {
+          "real": "BWI941",
+          "leida": "BWI941",
+          "exacta": true,
+          "caracteres": 1.0
+        },
+        {
+          "real": "CHN547",
+          "leida": "CHN547",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [],
+      "tiempo_s": 5.622,
+      "yolo_ms": 657.1,
+      "ocr_ms": 4821.4
+    },
+    "prueba8.jpg": {
+      "placas": [
+        {
+          "real": "AUQ413",
+          "leida": "AUQ413",
+          "exacta": true,
+          "caracteres": 1.0
+        },
+        {
+          "real": "T70662",
+          "leida": "T7O662",
+          "exacta": false,
+          "caracteres": 0.8333333333333334
+        }
+      ],
+      "otras_lecturas": [
+        "T7O662"
+      ],
+      "tiempo_s": 4.044,
+      "yolo_ms": 744.9,
+      "ocr_ms": 3165.6
+    },
+    "prueba9.jpg": {
+      "placas": [
+        {
+          "real": "H1I966",
+          "leida": "H1I966",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [
+        "06521"
+      ],
+      "tiempo_s": 3.326,
+      "yolo_ms": 614.5,
+      "ocr_ms": 2585.2
+    },
+    "prueba10.jpg": {
+      "placas": [
+        {
+          "real": "CER379",
+          "leida": "CER379",
+          "exacta": true,
+          "caracteres": 1.0
+        },
+        {
+          "real": "YCJ943",
+          "leida": "TCJ943",
+          "exacta": false,
+          "caracteres": 0.8333333333333334
+        }
+      ],
+      "otras_lecturas": [
+        "TCJ943",
+        "MINGENERAL",
+        "MINGENERAL"
+      ],
+      "tiempo_s": 6.031,
+      "yolo_ms": 610.0,
+      "ocr_ms": 5293.8
+    },
+    "prueba11.jpg": {
+      "placas": [
+        {
+          "real": "T4B546",
+          "leida": "T4B546",
+          "exacta": true,
+          "caracteres": 1.0
+        },
+        {
+          "real": "ALU384",
+          "leida": "ALU384",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [
+        "7P632"
+      ],
+      "tiempo_s": 4.749,
+      "yolo_ms": 598.3,
+      "ocr_ms": 4000.6
+    },
+    "prueba12.jpg": {
+      "placas": [
+        {
+          "real": "C1W445",
+          "leida": "C1W445",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [],
+      "tiempo_s": 2.199,
+      "yolo_ms": 618.3,
+      "ocr_ms": 1454.3
+    },
+    "3.jpeg": {
+      "placas": [
+        {
+          "real": "31016T",
+          "leida": "31016I",
+          "exacta": false,
+          "caracteres": 0.8333333333333334
+        },
+        {
+          "real": "4224ET",
+          "leida": "4224ET",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [
+        "31016I"
+      ],
+      "tiempo_s": 4.302,
+      "yolo_ms": 526.0,
+      "ocr_ms": 3667.1
+    },
+    "4.jpeg": {
+      "placas": [
+        {
+          "real": "BWI941",
+          "leida": "BWI941",
+          "exacta": true,
+          "caracteres": 1.0
+        },
+        {
+          "real": "CHN547",
+          "leida": "CHN547",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [],
+      "tiempo_s": 4.862,
+      "yolo_ms": 606.8,
+      "ocr_ms": 4143.4
+    },
+    "5.jpeg": {
+      "placas": [
+        {
+          "real": "BDI451",
+          "leida": "BDI451",
+          "exacta": true,
+          "caracteres": 1.0
+        },
+        {
+          "real": "BTU720",
+          "leida": "BTU720",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [],
+      "tiempo_s": 3.73,
+      "yolo_ms": 578.8,
+      "ocr_ms": 3045.6
+    },
+    "6.jpeg": {
+      "placas": [
+        {
+          "real": "C1W445",
+          "leida": "C1W445",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [],
+      "tiempo_s": 2.259,
+      "yolo_ms": 606.5,
+      "ocr_ms": 1531.8
+    },
+    "Foto-Placa-509-_jpg.rf.ef50ae25d4fd1f539fc4296e5e4b779a.jpg": {
+      "placas": [
+        {
+          "real": "T4B546",
+          "leida": "T4B546",
+          "exacta": true,
+          "caracteres": 1.0
+        },
+        {
+          "real": "ALU384",
+          "leida": "ALU384",
+          "exacta": true,
+          "caracteres": 1.0
+        }
+      ],
+      "otras_lecturas": [
+        "7P632"
+      ],
+      "tiempo_s": 4.842,
+      "yolo_ms": 574.0,
+      "ocr_ms": 4142.2
+    },
+    "vacio.jpg": {
+      "placas": [],
+      "otras_lecturas": [],
+      "tiempo_s": 0.577,
+      "yolo_ms": 568.4,
+      "ocr_ms": 0.0
+    }
+  }
+}
