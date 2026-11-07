@@ -19,7 +19,7 @@ def index():
 def temp_file(filename):
     return send_from_directory(TEMP_DIR, filename)
 
-@app.route("/api/upload", methods=["POST"])
+@app.route("/api/detect", methods=["POST"])
 def upload_image():
     if "image" not in request.files:
         return jsonify({"success": False, "error": "No se envió ninguna imagen."})

@@ -25,7 +25,7 @@ async function upload() {
   loader.style.display = "block";
 
   try {
-    const response = await fetch("/api/upload", {
+    const response = await fetch("/api/detect", {
       method: "POST",
       body: formData,
     });
