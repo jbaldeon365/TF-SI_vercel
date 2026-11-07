@@ -59,7 +59,11 @@ def upload_image():
         for d in detecciones:
             p_upper = d["texto"].strip().upper()
             validacion = validar_placa(p_upper, d["segmentos"])
-            deteccion = {"confianza": d["confianza"], "bbox": d["bbox"]}
+            deteccion = {
+                "confianza": d["confianza"],
+                "confianza_ocr": d["confianza_ocr"],
+                "bbox": d["bbox"],
+            }
 
             if not validacion["valida"]:
                 if validacion["pais"].startswith("desconocido"):

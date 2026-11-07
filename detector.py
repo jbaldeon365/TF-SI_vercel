@@ -7,7 +7,7 @@ import imutils
 import platform
 import time
 
-from placas import corregir_confusiones
+from placas import corregir_confusiones, validar_placa
 
 
 #  CONFIG: Usar el modelo empaquetado dentro del contenedor
@@ -40,6 +40,16 @@ model = YOLO(MODEL_PATH)
 # OCR con clasificación de ángulos
 ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
+
+
+def extraer_pares(resultado_ocr):
+    # Pares (texto, confianza) que devuelve PaddleOCR por cada línea leída
+    pares = []
+    for pagina in resultado_ocr:
+        if isinstance(pagina, dict):
+            for texto, puntaje in zip(pagina.get("rec_texts", []), pagina.get("rec_scores", [])):
+                pares.append((texto, float(puntaje)))
+    return pares
 
 
 #  FUNCIÓN PRINCIPAL DE DETECCIÓN
@@ -178,11 +188,22 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                     parts = [p for p in parts if re.search(r'\d', p)]
                     output_text = parts[-1] if parts else raw_text
 
+            # Preferir la lectura con formato de placa válido y mayor confianza del OCR
+            confianza_ocr = None
+            candidatos = []
+            for texto, puntaje in extraer_pares(result_ocr):
+                limpio = re.sub(r'[^A-Z0-9]', '', texto.upper())
+                if validar_placa(corregir_confusiones(limpio))["valida"]:
+                    candidatos.append((puntaje, limpio))
+            if candidatos:
+                confianza_ocr, output_text = max(candidatos)
+
             output_text = corregir_confusiones(output_text)
             print(f"[detect_plate] ocr segments={cleaned_segs} -> chosen='{output_text}'")
             detecciones.append({
                 "texto": output_text,
                 "confianza": round(conf, 3),
+                "confianza_ocr": round(confianza_ocr, 3) if confianza_ocr is not None else None,
                 "bbox": [x1, y1, x2, y2],
                 "segmentos": cleaned_segs,
             })
