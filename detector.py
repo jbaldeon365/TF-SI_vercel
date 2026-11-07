@@ -28,6 +28,9 @@ ASPECTO_MIN = 1.0
 ASPECTO_MAX = 6.5
 MIN_ANCHO_PLACA = 20
 
+# Margen del recorte para el OCR, proporcional al tamaño del recuadro
+MARGEN_RECORTE = 0.10
+
 #  CARGA DE MODELOS
 # Modelo YOLO LOCAL — ya no descarga nada
 model = YOLO(MODEL_PATH)
@@ -104,8 +107,10 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                 continue
 
             # Expandir bbox ligeramente
-            y1p, y2p = max(y1 - 10, 0), y2 + 10
-            x1p, x2p = max(x1 - 10, 0), x2 + 10
+            margen_x = max(int(ancho * MARGEN_RECORTE), 5)
+            margen_y = max(int(alto * MARGEN_RECORTE), 5)
+            y1p, y2p = max(y1 - margen_y, 0), y2 + margen_y
+            x1p, x2p = max(x1 - margen_x, 0), x2 + margen_x
             plate_img = image[y1p:y2p, x1p:x2p]
 
             if plate_img.size == 0:
