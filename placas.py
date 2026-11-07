@@ -35,6 +35,42 @@ def normalizar_placa(texto):
     return re.sub(r"[^A-Z0-9]", "", texto.upper())
 
 
+# Plantillas por posición: L = letra, D = dígito, X = cualquiera
+PLANTILLAS = ("LLLDDD", "LDLDDD", "DDDDXL")
+
+# Confusiones típicas del OCR entre dígitos y letras
+DIGITO_A_LETRA = {"0": "O", "1": "I", "2": "Z", "5": "S", "8": "B", "6": "G"}
+LETRA_A_DIGITO = {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "S": "5", "B": "8", "Z": "2", "G": "6"}
+
+
+def corregir_confusiones(texto):
+    """Si la lectura no es válida, prueba corregir confusiones letra/dígito según la posición."""
+    texto = normalizar_placa(texto)
+    if len(texto) != 6 or validar_placa(texto)["valida"]:
+        return texto
+
+    mejor = None
+    for plantilla in PLANTILLAS:
+        corregido, cambios = [], 0
+        for caracter, tipo in zip(texto, plantilla):
+            nuevo = caracter
+            if tipo == "L" and caracter.isdigit():
+                nuevo = DIGITO_A_LETRA.get(caracter)
+            elif tipo == "D" and caracter.isalpha():
+                nuevo = LETRA_A_DIGITO.get(caracter)
+            if nuevo is None:
+                break
+            cambios += nuevo != caracter
+            corregido.append(nuevo)
+        else:
+            if mejor is None or cambios < mejor[1]:
+                mejor = ("".join(corregido), cambios)
+
+    if mejor and validar_placa(mejor[0])["valida"]:
+        return mejor[0]
+    return texto
+
+
 def pais_por_texto(segmentos):
     for segmento in segmentos:
         for palabra, pais in PALABRAS_PAIS.items():

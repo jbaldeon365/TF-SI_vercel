@@ -7,6 +7,8 @@ import imutils
 import platform
 import time
 
+from placas import corregir_confusiones
+
 
 #  CONFIG: Usar el modelo empaquetado dentro del contenedor
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_3.pt")
@@ -176,6 +178,7 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                     parts = [p for p in parts if re.search(r'\d', p)]
                     output_text = parts[-1] if parts else raw_text
 
+            output_text = corregir_confusiones(output_text)
             print(f"[detect_plate] ocr segments={cleaned_segs} -> chosen='{output_text}'")
             detecciones.append({
                 "texto": output_text,
