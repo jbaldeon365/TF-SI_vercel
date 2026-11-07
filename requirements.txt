@@ -5,7 +5,8 @@ gunicorn==23.0.0
 ultralytics==8.3.233
 paddleocr==3.3.2
 paddlepaddle==3.2.2
-opencv-python-headless==4.12.0.88
+# contrib incluye dnn_superres (superresolución); reemplaza a opencv-python-headless
+opencv-contrib-python-headless==4.12.0.88
 # numpy 2.3.x conflicts with opencv-python-headless (requires <2.3.0). Pin to 2.2.x
 numpy==2.2.4
 pillow==12.0.0
