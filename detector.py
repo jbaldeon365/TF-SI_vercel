@@ -40,6 +40,23 @@ model = YOLO(MODEL_PATH)
 # OCR con clasificación de ángulos
 ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
+# Superresolución (opcional): agranda recortes de placa muy pequeños antes de reintentar el OCR
+SR_MODELO = os.path.join(os.path.dirname(__file__), "modelos", "FSRCNN_x4.pb")
+ANCHO_MAX_SR = 80
+
+
+def cargar_superresolucion():
+    try:
+        sr = cv2.dnn_superres.DnnSuperResImpl_create()
+        sr.readModel(SR_MODELO)
+        sr.setModel("fsrcnn", 4)
+        return sr
+    except Exception as e:
+        print(f"[detector] superresolución no disponible: {e}")
+        return None
+
+
+superres = cargar_superresolucion()
 
 
 def extraer_pares(resultado_ocr):
@@ -50,6 +67,22 @@ def extraer_pares(resultado_ocr):
             for texto, puntaje in zip(pagina.get("rec_texts", []), pagina.get("rec_scores", [])):
                 pares.append((texto, float(puntaje)))
     return pares
+
+
+def leer_recorte(recorte):
+    try:
+        return ocr.ocr(cv2.cvtColor(recorte, cv2.COLOR_BGR2RGB))
+    except Exception as e:
+        print(f"[detect_plate] OCR error: {e}")
+        return None
+
+
+def hay_placa_valida(resultado_ocr):
+    for texto, _ in extraer_pares(resultado_ocr or []):
+        limpio = re.sub(r'[^A-Z0-9]', '', texto.upper())
+        if validar_placa(corregir_confusiones(limpio))["valida"]:
+            return True
+    return False
 
 
 #  FUNCIÓN PRINCIPAL DE DETECCIÓN
@@ -130,36 +163,33 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
 
             # OCR
             t_ocr_ini = time.time()
-            try:
-                ocr_input = cv2.cvtColor(plate_img, cv2.COLOR_BGR2RGB)
-                result_ocr = ocr.ocr(ocr_input)
-            except Exception as e:
-                print(f"[detect_plate] OCR error: {e}")
-                result_ocr = None
+            result_ocr = leer_recorte(plate_img)
+            metodo = "yolo"
+
+            # Si no salió una placa válida y el recuadro es pequeño, reintenta con superresolución
+            if superres is not None and ancho < ANCHO_MAX_SR and not hay_placa_valida(result_ocr):
+                print(f"[detect_plate] reintento con superresolución (recuadro de {ancho} px)")
+                try:
+                    result_sr = leer_recorte(superres.upsample(plate_img))
+                except Exception as e:
+                    print(f"[detect_plate] superresolución falló: {e}")
+                    result_sr = None
+                if hay_placa_valida(result_sr):
+                    result_ocr = result_sr
+                    metodo = "yolo_superresolucion"
             t_ocr += time.time() - t_ocr_ini
 
             if not result_ocr:
                 continue
 
-            # Extraer segmentos de texto del resultado OCR de forma robusta
-            def _extract_segments(obj):
-                segs = []
-                if isinstance(obj, str):
-                    segs.append(obj)
-                elif isinstance(obj, tuple) and len(obj) > 0 and isinstance(obj[0], str):
-                    segs.append(obj[0])
-                elif isinstance(obj, (list, tuple)):
-                    for x in obj:
-                        segs.extend(_extract_segments(x))
-                elif isinstance(obj, dict):
-                    for v in obj.values():
-                        segs.extend(_extract_segments(v))
-                return segs
-
-            segments = _extract_segments(result_ocr)
+            # Solo los textos que el OCR reconoció (no los datos de configuración del resultado)
+            segments = [texto for texto, _ in extraer_pares(result_ocr)]
 
             # Limpiar cada segmento y crear lista de candidatos
-            cleaned_segs = [re.sub(r'[^A-Z0-9]', '', s.upper()) for s in segments if isinstance(s, str) and s.strip()]
+            cleaned_segs = [re.sub(r'[^A-Z0-9]', '', s.upper()) for s in segments if s.strip()]
+            cleaned_segs = [s for s in cleaned_segs if s]
+            if not cleaned_segs:
+                continue
 
             # Buscar coincidencias estrictas primero (ej. 2-3 letras + 3-4 dígitos)
             strict_matches = []
@@ -206,7 +236,7 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                 "confianza_ocr": round(confianza_ocr, 3) if confianza_ocr is not None else None,
                 "bbox": [x1, y1, x2, y2],
                 "segmentos": cleaned_segs,
-                "metodo": "yolo",
+                "metodo": metodo,
             })
 
             # Dibujar en la imagen
