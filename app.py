@@ -38,8 +38,15 @@ def upload_image():
         print(f"Error guardando archivo: {e}")
         return jsonify({"success": False, "error": "No se pudo guardar el archivo en el servidor."})
 
+    # Umbrales opcionales enviados en el formulario (entre 0 y 1)
+    umbrales = {}
+    for campo in ("conf_thres", "iou_thres"):
+        valor = request.form.get(campo, type=float)
+        if valor is not None and 0 <= valor <= 1:
+            umbrales[campo] = valor
+
     try:
-        plates, annotated_path = detect_plate(filepath)
+        plates, annotated_path = detect_plate(filepath, **umbrales)
     except Exception as e:
         print(f"Error durante la detección: {e}")
         return jsonify({"success": False, "error": f"Error interno durante la detección: {e}"})

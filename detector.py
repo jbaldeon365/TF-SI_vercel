@@ -19,6 +19,10 @@ else:
 
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+# Umbrales de NMS (por defecto los mismos de Ultralytics)
+CONF_THRES = float(os.environ.get("CONF_THRES", 0.25))
+IOU_THRES = float(os.environ.get("IOU_THRES", 0.7))
+
 #  CARGA DE MODELOS
 # Modelo YOLO LOCAL — ya no descarga nada
 model = YOLO(MODEL_PATH)
@@ -30,8 +34,8 @@ ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
 #  FUNCIÓN PRINCIPAL DE DETECCIÓN
 
-def detect_plate(image_path):
-    
+def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
+
     start = time.time()
     
     image = cv2.imread(image_path)
@@ -39,7 +43,7 @@ def detect_plate(image_path):
         print(f"Error: No se pudo leer la imagen en {image_path}")
         return [], None
     
-    results = model(image)  # YOLO inference
+    results = model(image, conf=conf_thres, iou=iou_thres)  # YOLO inference
     plate_texts = []
 
     print(f"[detect_plate] model returned {len(results)} result(s)")
