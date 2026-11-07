@@ -49,7 +49,7 @@ async function upload() {
         html += `
           <div class="alerta" style="background-color:${color}">
             <h3>🚘 Placa: ${r.placa}</h3>
-            <p><strong>Estado:</strong> ${r.estado.toUpperCase()}</p>
+            <p><strong>Estado:</strong> ${r.estado.toUpperCase()} | <strong>País:</strong> ${r.pais || "N/A"}</p>
             <p><strong>Marca:</strong> ${r.marca || "N/A"} | <strong>Modelo:</strong> ${r.modelo || "N/A"}</p>
             <p><strong>Color:</strong> ${r.color || "N/A"}</p>
             <p><em>${r.descripcion}</em></p>

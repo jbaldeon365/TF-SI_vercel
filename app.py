@@ -3,6 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 import json
 from detector import detect_plate, TEMP_DIR
+from placas import validar_placa
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -57,10 +58,29 @@ def upload_image():
 
         for p in plates:
             p_upper = p.strip().upper()
+            validacion = validar_placa(p_upper)
+
+            if not validacion["valida"]:
+                if validacion["pais"].startswith("desconocido"):
+                    descripcion = "La lectura no coincide con ningún formato de placa peruana."
+                else:
+                    descripcion = f"El formato corresponde a {validacion['pais']}, no a Perú."
+                resultados.append({
+                    "placa": p_upper,
+                    "valida": False,
+                    "pais": validacion["pais"],
+                    "encontrado": False,
+                    "estado": "invalida",
+                    "descripcion": descripcion
+                })
+                continue
+
             vehiculo = next((v for v in vehiculos if v["placa"] == p_upper), None)
             if vehiculo:
                 resultados.append({
                     "placa": p_upper,
+                    "valida": True,
+                    "pais": validacion["pais"],
                     "encontrado": True,
                     "estado": vehiculo["estado"],
                     "marca": vehiculo["marca"],
@@ -71,6 +91,8 @@ def upload_image():
             else:
                 resultados.append({
                     "placa": p_upper,
+                    "valida": True,
+                    "pais": validacion["pais"],
                     "encontrado": False,
                     "estado": "desconocido",
                     "descripcion": "No hay registro en la base local."
