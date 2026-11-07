@@ -206,6 +206,7 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                 "confianza_ocr": round(confianza_ocr, 3) if confianza_ocr is not None else None,
                 "bbox": [x1, y1, x2, y2],
                 "segmentos": cleaned_segs,
+                "metodo": "yolo",
             })
 
             # Dibujar en la imagen
@@ -215,6 +216,38 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
             except:
                 pass
+
+    # Respaldo: si YOLO no encontró placas (por ejemplo una placa que llena toda la imagen),
+    # se lee la imagen completa y solo se acepta un texto con formato de placa válido
+    if not detecciones:
+        t_ocr_ini = time.time()
+        try:
+            resultado_completo = ocr.ocr(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        except Exception as e:
+            print(f"[detect_plate] OCR error (imagen completa): {e}")
+            resultado_completo = None
+        t_ocr += time.time() - t_ocr_ini
+
+        pares = extraer_pares(resultado_completo or [])
+        segmentos = [re.sub(r'[^A-Z0-9]', '', texto.upper()) for texto, _ in pares]
+        candidatos = []
+        for texto, puntaje in pares:
+            corregido = corregir_confusiones(re.sub(r'[^A-Z0-9]', '', texto.upper()))
+            if validar_placa(corregido)["valida"]:
+                candidatos.append((puntaje, corregido))
+
+        if candidatos:
+            puntaje, texto = max(candidatos)
+            alto_img, ancho_img = image.shape[:2]
+            detecciones.append({
+                "texto": texto,
+                "confianza": None,
+                "confianza_ocr": round(puntaje, 3),
+                "bbox": [0, 0, ancho_img, alto_img],
+                "segmentos": segmentos,
+                "metodo": "ocr_imagen_completa",
+            })
+            print(f"[detect_plate] respaldo OCR imagen completa -> '{texto}'")
 
     # Redimensionar y guardar anotación
     try:

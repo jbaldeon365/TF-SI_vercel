@@ -63,6 +63,7 @@ def upload_image():
                 "confianza": d["confianza"],
                 "confianza_ocr": d["confianza_ocr"],
                 "bbox": d["bbox"],
+                "metodo": d["metodo"],
             }
 
             if not validacion["valida"]:
