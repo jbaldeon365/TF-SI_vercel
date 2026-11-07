@@ -7,6 +7,9 @@ from placas import normalizar_placa, validar_placa
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
+# Ancho mínimo (px) del recuadro de una placa para poder leerla
+ANCHO_PLACA_LEGIBLE = 80
+
 # Cargar JSON local con placas de vehículos
 def cargar_vehiculos():
     with open("vehiculos.json", "r", encoding="utf-8") as f:
@@ -67,7 +70,13 @@ def upload_image():
             }
 
             if not validacion["valida"]:
-                if validacion["pais"].startswith("desconocido"):
+                ancho_placa = d["bbox"][2] - d["bbox"][0]
+                baja_resolucion = ancho_placa < ANCHO_PLACA_LEGIBLE
+
+                if baja_resolucion:
+                    descripcion = (f"La placa mide solo {ancho_placa} px de ancho y no se puede leer. "
+                                   "Sube una imagen de mayor resolución.")
+                elif validacion["pais"].startswith("desconocido"):
                     descripcion = "La lectura no coincide con ningún formato de placa peruana."
                 else:
                     descripcion = f"El formato corresponde a {validacion['pais']}, no a Perú."
@@ -77,6 +86,7 @@ def upload_image():
                     "pais": validacion["pais"],
                     "encontrado": False,
                     "estado": "invalida",
+                    "baja_resolucion": baja_resolucion,
                     "descripcion": descripcion,
                     **deteccion
                 })
