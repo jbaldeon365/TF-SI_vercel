@@ -184,6 +184,14 @@
             <div class="stat stat--alert"><span>Alertas</span><b id="stAlertas">0</b></div>
           </div>
 
+          <div class="chips" id="logChips" role="group" aria-label="Filtrar por estado">
+            <button type="button" class="chip is-on" data-estado="todos" aria-pressed="true">Todos <b>0</b></button>
+            <button type="button" class="chip chip--alert" data-estado="alertas" aria-pressed="false">Alertas <b>0</b></button>
+            <button type="button" class="chip" data-estado="normal" aria-pressed="false">Normal <b>0</b></button>
+            <button type="button" class="chip" data-estado="sin_registro" aria-pressed="false">Sin registro <b>0</b></button>
+            <button type="button" class="chip" data-estado="invalidas" aria-pressed="false">No válidas <b>0</b></button>
+          </div>
+
           <section class="panel">
             <div class="empty empty--sm" id="logVacio">
               <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 14h24M12 24h24M12 34h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>

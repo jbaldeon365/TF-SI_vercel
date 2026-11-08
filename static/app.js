@@ -49,6 +49,7 @@
     logVacio: $("#logVacio"),
     logList: $("#logList"),
     logFiltro: $("#logFiltro"),
+    logChips: $("#logChips"),
     navConteo: $("#navConteo"),
     stImagenes: $("#stImagenes"),
     stPlacas: $("#stPlacas"),
@@ -407,13 +408,15 @@
   }
 
   // ---------- historial (guardado en MongoDB) ----------
+  let filtroEstado = "todos";
+
   async function cargarHistorial() {
     try {
       const q = el.logFiltro.value.trim();
-      const respuesta = await fetch(`/api/historial?q=${encodeURIComponent(q)}`);
+      const respuesta = await fetch(`/api/historial?q=${encodeURIComponent(q)}&estado=${filtroEstado}`);
       const json = await respuesta.json();
       if (!json.success) throw new Error(json.error);
-      pintarRegistro(json.filas, json.stats);
+      pintarRegistro(json.filas, json.stats, json.conteos);
     } catch (error) {
       console.error("No se pudo cargar el historial:", error);
       el.logList.innerHTML = "";
@@ -422,14 +425,22 @@
     }
   }
 
-  function pintarRegistro(filas, stats) {
+  function pintarRegistro(filas, stats, conteos) {
     el.logVacio.hidden = filas.length > 0;
     const q = el.logFiltro.value.trim();
     if (!filas.length) {
       el.logVacio.querySelector("p").textContent = q
-        ? `Ninguna placa coincide con «${q}».`
-        : "Todavía no hay lecturas. Analiza una imagen para empezar.";
+        ? `Ninguna placa coincide con «${q}»${filtroEstado !== "todos" ? " en este estado" : ""}.`
+        : filtroEstado !== "todos"
+          ? "No hay placas en este estado."
+          : "Todavía no hay lecturas. Analiza una imagen para empezar.";
     }
+    el.logChips.querySelectorAll(".chip").forEach((chip) => {
+      chip.querySelector("b").textContent = (conteos || {})[chip.dataset.estado] ?? 0;
+      const activo = chip.dataset.estado === filtroEstado;
+      chip.classList.toggle("is-on", activo);
+      chip.setAttribute("aria-pressed", String(activo));
+    });
     el.navConteo.hidden = stats.placas === 0;
     el.navConteo.textContent = stats.placas;
     el.stImagenes.textContent = stats.imagenes;
@@ -649,6 +660,14 @@
   });
   el.lightboxClose.addEventListener("click", () => el.lightbox.close());
   el.lightbox.addEventListener("click", (e) => { if (e.target === el.lightbox) el.lightbox.close(); });
+
+  // Fichas de estado del registro (se combinan con la búsqueda)
+  el.logChips.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    filtroEstado = chip.dataset.estado;
+    cargarHistorial();
+  });
 
   // Búsqueda de placas en el registro (consulta todo el historial, con una pequeña espera al teclear)
   let temporizadorBusqueda = null;

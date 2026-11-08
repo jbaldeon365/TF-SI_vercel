@@ -86,6 +86,14 @@ def listar_vehiculos():
 
 ESTADOS_ALERTA = ["robado", "denunciado", "sospechoso"]
 
+# Fichas del registro -> estados que agrupan ("todos" no filtra)
+FILTROS_ESTADO = {
+    "alertas": ESTADOS_ALERTA,
+    "normal": ["normal"],
+    "sin_registro": ["desconocido"],
+    "invalidas": ["invalida"],
+}
+
 
 def emitir_eventos(resultados, imagen_anotada):
     # Avisa en vivo a todos los clientes conectados; un fallo aquí no debe romper el análisis
@@ -118,7 +126,7 @@ def historial():
         buscado = re.sub(r"[^A-Z0-9]", "", request.args.get("q", "").upper())
         filtro = {"placa_norm": {"$regex": re.escape(buscado)}} if buscado else {"placa_norm": {"$ne": None}}
         # Una fila por placa: último estado, cuántas veces se leyó y si su estado cambió
-        filas = list(det.aggregate([
+        grupos = [
             {"$match": filtro},
             {"$sort": {"fecha": -1}},
             {"$group": {
@@ -133,10 +141,28 @@ def historial():
                 "veces": {"$sum": 1},
                 "estados": {"$addToSet": "$estado"},
             }},
-            {"$sort": {"ultima": -1}},
-            {"$limit": 50},
-            {"$project": {"_id": 0}},
-        ]))
+        ]
+        # Fichas por estado: las filas se filtran y los conteos se calculan sobre la búsqueda por placa
+        permitidos = FILTROS_ESTADO.get(request.args.get("estado", ""))
+        filtrar_estado = [{"$match": {"estado": {"$in": permitidos}}}] if permitidos else []
+        salida = list(det.aggregate(grupos + [{"$facet": {
+            "filas": filtrar_estado + [
+                {"$sort": {"ultima": -1}},
+                {"$limit": 50},
+                {"$project": {"_id": 0}},
+            ],
+            "conteos": [{"$group": {"_id": "$estado", "n": {"$sum": 1}}}],
+        }}]))
+        resultado = salida[0] if salida else {"filas": [], "conteos": []}
+        filas = resultado["filas"]
+        por_estado = {c["_id"]: c["n"] for c in resultado["conteos"]}
+        conteos = {
+            "todos": sum(por_estado.values()),
+            "alertas": sum(por_estado.get(e, 0) for e in ESTADOS_ALERTA),
+            "normal": por_estado.get("normal", 0),
+            "sin_registro": por_estado.get("desconocido", 0),
+            "invalidas": por_estado.get("invalida", 0),
+        }
         for f in filas:
             for campo in ("ultima", "primera"):
                 fecha = f.get(campo)
@@ -146,7 +172,7 @@ def historial():
             "placas": len(det.distinct("placa_norm")),
             "alertas": len(det.distinct("placa_norm", {"estado": {"$in": ESTADOS_ALERTA}})),
         }
-        return jsonify({"success": True, "filas": filas, "stats": stats})
+        return jsonify({"success": True, "filas": filas, "stats": stats, "conteos": conteos})
     except Exception as e:
         print(f"Error leyendo el historial: {e}")
         return jsonify({"success": False, "error": "No se pudo leer el historial."}), 500
