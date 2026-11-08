@@ -70,8 +70,6 @@
   let urlPrevia = null;
   let ocupado = false;
   let temporizadorToast = null;
-  const registro = [];
-  const sesion = { imagenes: 0, placas: 0, alertas: 0 };
   let vehiculos = null;
 
   // ---------- utilidades ----------
@@ -182,6 +180,7 @@
     cerrarMenu();
     window.scrollTo(0, 0);
     if (nombre === "vehiculos") cargarVehiculos();
+    if (nombre === "registro") cargarHistorial();
   }
 
   function irAnalisis() {
@@ -386,29 +385,44 @@
     if (json.annotated) el.imgAnotada.src = `${json.annotated}?t=${Date.now()}`;
     el.compare.hidden = !json.annotated;
 
-    sesion.imagenes += 1;
-    ordenados.forEach((r) => {
-      sesion.placas += 1;
-      if (["robado", "denunciado", "sospechoso"].includes(r.estado)) sesion.alertas += 1;
-      registro.unshift({ hora: new Date(), placa: formatoPlaca(r.placa, r.valida !== false), estado: estadoDe(r) });
-    });
-    registro.length = Math.min(registro.length, 50);
-    pintarRegistro();
+    cargarHistorial();
   }
 
-  function pintarRegistro() {
-    el.logVacio.hidden = registro.length > 0;
-    el.navConteo.hidden = registro.length === 0;
-    el.navConteo.textContent = registro.length;
-    el.stImagenes.textContent = sesion.imagenes;
-    el.stPlacas.textContent = sesion.placas;
-    el.stAlertas.textContent = sesion.alertas;
-    el.logList.innerHTML = registro.map((e) => `
-      <li class="tone-${e.estado.tono}">
-        <span class="log-time">${e.hora.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-        <span class="log-plate">${esc(e.placa || "—")}</span>
-        <span class="badge">${ICONOS[e.estado.icono]}${esc(e.estado.etiqueta)}</span>
-      </li>`).join("");
+  // ---------- historial (guardado en MongoDB) ----------
+  async function cargarHistorial() {
+    try {
+      const respuesta = await fetch("/api/historial");
+      const json = await respuesta.json();
+      if (!json.success) throw new Error(json.error);
+      pintarRegistro(json.filas, json.stats);
+    } catch (error) {
+      console.error("No se pudo cargar el historial:", error);
+      el.logList.innerHTML = "";
+      el.logVacio.hidden = false;
+      el.logVacio.querySelector("p").textContent = "No se pudo cargar el historial. Revisa la conexión con la base de datos.";
+    }
+  }
+
+  function pintarRegistro(filas, stats) {
+    el.logVacio.hidden = filas.length > 0;
+    if (!filas.length) el.logVacio.querySelector("p").textContent = "Todavía no hay lecturas. Analiza una imagen para empezar.";
+    el.navConteo.hidden = stats.placas === 0;
+    el.navConteo.textContent = stats.placas;
+    el.stImagenes.textContent = stats.imagenes;
+    el.stPlacas.textContent = stats.placas;
+    el.stAlertas.textContent = stats.alertas;
+    el.logList.innerHTML = filas.map((f) => {
+      const estado = estadoDe(f);
+      const cuando = f.fecha
+        ? new Date(f.fecha).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        : "—";
+      return `
+      <li class="tone-${estado.tono}">
+        <span class="log-time">${esc(cuando)}</span>
+        <span class="log-plate">${esc(formatoPlaca(f.placa, f.valida !== false) || "—")}</span>
+        <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
+      </li>`;
+    }).join("");
   }
 
   // ---------- eventos ----------
@@ -475,10 +489,16 @@
   el.lightboxClose.addEventListener("click", () => el.lightbox.close());
   el.lightbox.addEventListener("click", (e) => { if (e.target === el.lightbox) el.lightbox.close(); });
 
-  el.limpiarLog.addEventListener("click", () => {
-    registro.length = 0;
-    sesion.imagenes = sesion.placas = sesion.alertas = 0;
-    pintarRegistro();
+  el.limpiarLog.addEventListener("click", async () => {
+    if (!confirm("¿Borrar todo el historial guardado en la base de datos? No se puede deshacer.")) return;
+    try {
+      const respuesta = await fetch("/api/historial", { method: "DELETE" });
+      if (!(await respuesta.json()).success) throw new Error("falló");
+      aviso("Historial vaciado");
+    } catch (error) {
+      aviso("No se pudo vaciar el historial.", true);
+    }
+    cargarHistorial();
   });
 
   // Barra lateral y vistas
@@ -488,6 +508,6 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarMenu(); });
   el.vehFiltro.addEventListener("input", pintarVehiculos);
 
-  pintarRegistro();
+  cargarHistorial();
   mostrarVista();
 })();

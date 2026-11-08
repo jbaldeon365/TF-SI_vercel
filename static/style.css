@@ -130,7 +130,7 @@ kbd {
 .crumbs b { color: var(--text); font-weight: 600; white-space: nowrap; }
 .topbar-hint { margin-left: auto; font-size: .8rem; color: var(--dim); }
 
-.content { padding: 30px 28px 56px; width: min(1180px, 100%); outline: none; }
+.content { padding: 30px 28px 56px; width: min(1180px, 100%); margin-inline: auto; outline: none; }
 .view[hidden] { display: none; }
 .view-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 26px; }
 .view-head h1 { font-size: clamp(1.45rem, 2.4vw, 1.9rem); letter-spacing: -.01em; }
@@ -377,7 +377,7 @@ kbd {
 /* ===== Registro ===== */
 .log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .log-list li {
-  display: grid; grid-template-columns: 74px 1fr auto; gap: 14px; align-items: center;
+  display: grid; grid-template-columns: 128px 1fr auto; gap: 14px; align-items: center;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px;
 }
 .log-time { font-family: var(--mono); font-size: .78rem; color: var(--dim); }

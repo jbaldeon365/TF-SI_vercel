@@ -1,19 +1,47 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 import os
-import json
+import uuid
+from datetime import datetime, timezone
 from detector import detect_plate, TEMP_DIR
 from placas import normalizar_placa, validar_placa
+from db import obtener_db, asegurar_indices
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
 # Ancho mínimo (px) del recuadro de una placa para poder leerla
 ANCHO_PLACA_LEGIBLE = 80
 
-# Cargar JSON local con placas de vehículos
 def cargar_vehiculos():
-    with open("vehiculos.json", "r", encoding="utf-8") as f:
-        return json.load(f)["vehiculos"]
+    # Vehículos de interés guardados en MongoDB (sin el _id interno)
+    return list(obtener_db().vehiculos.find({}, {"_id": 0, "placa_norm": 0}))
+
+
+def buscar_vehiculo(placa):
+    return obtener_db().vehiculos.find_one({"placa_norm": normalizar_placa(placa)}, {"_id": 0})
+
+
+def guardar_detecciones(resultados):
+    # El historial no debe impedir que el análisis responda si la base falla
+    try:
+        ahora = datetime.now(timezone.utc)
+        analisis_id = uuid.uuid4().hex  # agrupa las placas de una misma imagen
+        documentos = [{
+            "analisis_id": analisis_id,
+            "placa": r["placa"],
+            "placa_norm": normalizar_placa(r["placa"]),
+            "estado": r["estado"],
+            "valida": r.get("valida", True),
+            "baja_resolucion": r.get("baja_resolucion", False),
+            "fecha": ahora,
+            "confianza": r.get("confianza"),
+            "confianza_ocr": r.get("confianza_ocr"),
+            "metodo": r.get("metodo"),
+        } for r in resultados]
+        if documentos:
+            obtener_db().detecciones.insert_many(documentos)
+    except Exception as e:
+        print(f"No se pudo guardar el historial: {e}")
 
 @app.route("/")
 def index():
@@ -22,6 +50,39 @@ def index():
 @app.route("/api/vehiculos")
 def listar_vehiculos():
     return jsonify({"vehiculos": cargar_vehiculos()})
+
+ESTADOS_ALERTA = ["robado", "denunciado", "sospechoso"]
+
+
+@app.route("/api/historial")
+def historial():
+    try:
+        det = obtener_db().detecciones
+        filas = list(det.find({}, {"_id": 0, "placa_norm": 0, "analisis_id": 0})
+                     .sort("fecha", -1).limit(50))
+        for f in filas:
+            fecha = f.get("fecha")
+            f["fecha"] = fecha.replace(tzinfo=timezone.utc).isoformat() if fecha else None
+        stats = {
+            "imagenes": len(det.distinct("analisis_id")),
+            "placas": det.count_documents({}),
+            "alertas": det.count_documents({"estado": {"$in": ESTADOS_ALERTA}}),
+        }
+        return jsonify({"success": True, "filas": filas, "stats": stats})
+    except Exception as e:
+        print(f"Error leyendo el historial: {e}")
+        return jsonify({"success": False, "error": "No se pudo leer el historial."}), 500
+
+
+@app.route("/api/historial", methods=["DELETE"])
+def vaciar_historial():
+    try:
+        obtener_db().detecciones.delete_many({})
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"Error vaciando el historial: {e}")
+        return jsonify({"success": False, "error": "No se pudo vaciar el historial."}), 500
+
 
 @app.route("/temp_files/<filename>")
 def temp_file(filename):
@@ -60,7 +121,6 @@ def upload_image():
         return jsonify({"success": False, "error": f"Error interno durante la detección: {e}"})
 
     if detecciones:
-        vehiculos = cargar_vehiculos()
         resultados = []
 
         for d in detecciones:
@@ -96,7 +156,7 @@ def upload_image():
                 })
                 continue
 
-            vehiculo = next((v for v in vehiculos if normalizar_placa(v["placa"]) == normalizar_placa(p_upper)), None)
+            vehiculo = buscar_vehiculo(p_upper)
             if vehiculo:
                 resultados.append({
                     "placa": p_upper,
@@ -121,6 +181,8 @@ def upload_image():
                     **deteccion
                 })
 
+        guardar_detecciones(resultados)
+
         annotated_filename = os.path.basename(annotated_path) if annotated_path else None
 
         return jsonify({
@@ -134,5 +196,6 @@ def upload_image():
         return jsonify({"success": False, "error": "No se detectaron placas."})
 
 if __name__ == "__main__":
+    asegurar_indices()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
