@@ -22,6 +22,7 @@ def buscar_vehiculo(placa):
 
 
 def guardar_detecciones(resultados):
+    # Cada lectura se guarda como evidencia; el historial las agrupa por placa.
     # El historial no debe impedir que el análisis responda si la base falla
     try:
         ahora = datetime.now(timezone.utc)
@@ -58,15 +59,33 @@ ESTADOS_ALERTA = ["robado", "denunciado", "sospechoso"]
 def historial():
     try:
         det = obtener_db().detecciones
-        filas = list(det.find({}, {"_id": 0, "placa_norm": 0, "analisis_id": 0})
-                     .sort("fecha", -1).limit(50))
+        # Una fila por placa: último estado, cuántas veces se leyó y si su estado cambió
+        filas = list(det.aggregate([
+            {"$match": {"placa_norm": {"$ne": None}}},
+            {"$sort": {"fecha": -1}},
+            {"$group": {
+                "_id": "$placa_norm",
+                "placa": {"$first": "$placa"},
+                "estado": {"$first": "$estado"},
+                "valida": {"$first": "$valida"},
+                "baja_resolucion": {"$first": "$baja_resolucion"},
+                "ultima": {"$first": "$fecha"},
+                "primera": {"$last": "$fecha"},
+                "veces": {"$sum": 1},
+                "estados": {"$addToSet": "$estado"},
+            }},
+            {"$sort": {"ultima": -1}},
+            {"$limit": 50},
+            {"$project": {"_id": 0}},
+        ]))
         for f in filas:
-            fecha = f.get("fecha")
-            f["fecha"] = fecha.replace(tzinfo=timezone.utc).isoformat() if fecha else None
+            for campo in ("ultima", "primera"):
+                fecha = f.get(campo)
+                f[campo] = fecha.replace(tzinfo=timezone.utc).isoformat() if fecha else None
         stats = {
             "imagenes": len(det.distinct("analisis_id")),
-            "placas": det.count_documents({}),
-            "alertas": det.count_documents({"estado": {"$in": ESTADOS_ALERTA}}),
+            "placas": len(det.distinct("placa_norm")),
+            "alertas": len(det.distinct("placa_norm", {"estado": {"$in": ESTADOS_ALERTA}})),
         }
         return jsonify({"success": True, "filas": filas, "stats": stats})
     except Exception as e:

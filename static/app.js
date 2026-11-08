@@ -411,15 +411,23 @@
     el.stImagenes.textContent = stats.imagenes;
     el.stPlacas.textContent = stats.placas;
     el.stAlertas.textContent = stats.alertas;
+    const fechaCorta = (iso) => iso
+      ? new Date(iso).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+      : "—";
     el.logList.innerHTML = filas.map((f) => {
       const estado = estadoDe(f);
-      const cuando = f.fecha
-        ? new Date(f.fecha).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
-        : "—";
+      const repetida = f.veces > 1;
+      const cambio = (f.estados || []).length > 1;
+      const detalle = `Primera lectura: ${fechaCorta(f.primera)}
+Última lectura: ${fechaCorta(f.ultima)}`;
       return `
       <li class="tone-${estado.tono}">
-        <span class="log-time">${esc(cuando)}</span>
-        <span class="log-plate">${esc(formatoPlaca(f.placa, f.valida !== false) || "—")}</span>
+        <span class="log-time" title="Última lectura">${esc(fechaCorta(f.ultima))}</span>
+        <span class="log-main">
+          <span class="log-plate">${esc(formatoPlaca(f.placa, f.valida !== false) || "—")}</span>
+          ${repetida ? `<span class="rep" title="${esc(detalle)}">×${f.veces}</span>` : ""}
+          ${cambio ? `<span class="rep rep--change" title="Esta placa tuvo distintos estados en sus lecturas">Estado cambió</span>` : ""}
+        </span>
         <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
       </li>`;
     }).join("");
