@@ -10,6 +10,14 @@ uploads/
 resultados/
 etiquetas.json
 
+# Imágenes analizadas (fotos de terceros)
+capturas/
+
+# Credenciales (nunca se suben)
+.env
+.env.*
+!.env.example
+
 # Modelos: solo se versiona el que usa el sistema
 *.pt
 !best_3.pt
