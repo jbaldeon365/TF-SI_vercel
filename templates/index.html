@@ -2,38 +2,267 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Detección de Placas - Perú</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CERCO IA · Reconocimiento automático de placas</title>
+  <meta name="description" content="CERCO IA detecta placas vehiculares en imágenes, lee sus caracteres y las contrasta con registros de interés para alertar al operador.">
+  <meta name="theme-color" content="#070b14">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1220'/%3E%3Cpath d='M16 5l9 3.5v7c0 5.2-3.7 9.2-9 11.5-5.3-2.3-9-6.3-9-11.5v-7z' fill='none' stroke='%2322d3ee' stroke-width='2'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <h1>🚗 Detección de Placas - Perú</h1>
-  </header>
+  <a class="skip-link" href="#contenido">Ir al contenido</a>
 
-  <main>
-    <div class="upload-card">
-      <p>Sube una imagen para identificar la placa del vehículo.</p>
-      <input type="file" id="fileInput" accept="image/*">
-      <button onclick="upload()">Subir y detectar</button>
-      <div class="loader" id="loader"></div>
-      <div id="result"></div>
-    </div>
+  <div class="app">
+    <!-- ===================== BARRA LATERAL ===================== -->
+    <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
+      <a class="brand" href="#analisis" aria-label="CERCO IA, inicio">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M16 3.5l10 3.9v8.1c0 5.8-4.1 10.2-10 12.9-5.9-2.7-10-7.1-10-12.9V7.4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M11 16.2l3.3 3.3L21.2 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="brand-text">
+          <span class="brand-name">CERCO <b>IA</b></span>
+          <span class="brand-sub">Cerco de seguridad vehicular</span>
+        </span>
+      </a>
 
-    <div class="image-container">
-      <div class="image-box">
-        <h3>Imagen Original</h3>
-        <img id="preview" style="display:none;">
+      <nav class="side-nav">
+        <p class="side-group">Operación</p>
+        <a class="side-link" href="#analisis" data-view="analisis">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M12 9v6M9 12h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Análisis de imagen</span>
+        </a>
+        <a class="side-link" href="#registro" data-view="registro">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span>Registro de sesión</span>
+          <b class="side-count" id="navConteo" hidden>0</b>
+        </a>
+
+        <p class="side-group">Datos</p>
+        <a class="side-link" href="#vehiculos" data-view="vehiculos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3l2-5h12l2 5v3M4 15h16M4 15v3h3v-3M17 15v3h3v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="12.5" r=".6" fill="currentColor"/><circle cx="16" cy="12.5" r=".6" fill="currentColor"/></svg>
+          <span>Vehículos registrados</span>
+        </a>
+
+        <p class="side-group">Ayuda</p>
+        <a class="side-link" href="#acerca" data-view="acerca">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11v5M12 8v.01" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <span>Acerca del sistema</span>
+        </a>
+      </nav>
+
+      <div class="side-foot">
+        <span class="status-pill"><i class="dot" aria-hidden="true"></i> Prototipo · Etapa 1</span>
+        <p>YOLO11 · PaddleOCR · Flask</p>
       </div>
-      <div class="image-box">
-        <h3>Resultado Detectado</h3>
-        <img id="annotated" style="display:none;">
-      </div>
-    </div>
-  </main>
+    </aside>
+    <div class="scrim" id="scrim" hidden></div>
 
-  <footer>
-    Proyecto YOLOv11 - Detección de Placas © 2025
-  </footer>
+    <!-- ===================== CONTENIDO ===================== -->
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="menu-btn" id="btnMenu" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </button>
+        <div class="crumbs">
+          <span>CERCO IA</span>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <b id="viewTitle">Análisis de imagen</b>
+        </div>
+        <span class="topbar-hint"><kbd>Ctrl</kbd> + <kbd>V</kbd> pega una imagen en cualquier momento</span>
+      </header>
+
+      <main class="content" id="contenido" tabindex="-1">
+
+        <!-- ---------- Vista: análisis ---------- -->
+        <section class="view" data-view="analisis" aria-labelledby="t-analisis">
+          <header class="view-head">
+            <div>
+              <h1 id="t-analisis">Análisis de imagen</h1>
+              <p class="view-desc">
+                Sube, arrastra o pega una foto con la placa visible. Las placas muy pequeñas
+                (menos de unos 80 px de ancho) no se pueden leer. Una coincidencia es una ayuda:
+                verifícala contra la imagen antes de actuar.
+              </p>
+            </div>
+          </header>
+
+          <div class="lab-grid">
+            <section class="panel" aria-labelledby="in-title">
+              <h2 class="panel-title" id="in-title"><span class="panel-idx">A</span> Imagen de entrada</h2>
+
+              <div class="dropzone" id="dropzone" role="button" tabindex="0"
+                   aria-label="Elegir, arrastrar o pegar una imagen">
+                <input type="file" id="fileInput" accept="image/*" hidden>
+
+                <div class="dz-empty">
+                  <svg class="dz-icon" viewBox="0 0 48 48" aria-hidden="true">
+                    <rect x="6" y="10" width="36" height="28" rx="5" fill="none" stroke="currentColor" stroke-width="2"/>
+                    <circle cx="17" cy="20" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/>
+                    <path d="M8 34l10-9 7 6 6-5 9 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <p class="dz-title">Arrastra una imagen aquí</p>
+                  <p class="dz-sub">o haz clic para elegir un archivo</p>
+                  <p class="dz-paste"><kbd>Ctrl</kbd> + <kbd>V</kbd> para pegar desde el portapapeles</p>
+                  <p class="dz-fmt">JPG, PNG o WEBP · hasta 15 MB</p>
+                </div>
+
+                <div class="dz-filled">
+                  <img id="previewImg" alt="Vista previa de la imagen seleccionada">
+                  <div class="scan-overlay" aria-hidden="true"><span></span></div>
+                  <div class="dz-bar">
+                    <span class="dz-meta" id="fileMeta"></span>
+                    <span class="dz-actions">
+                      <button type="button" class="chip-btn" id="btnCambiar">Cambiar</button>
+                      <button type="button" class="chip-btn chip-btn--danger" id="btnQuitar">Quitar</button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="actions">
+                <button type="button" class="btn btn-primary" id="btnAnalizar" disabled>
+                  <span class="btn-label">Analizar imagen</span>
+                  <span class="spinner" aria-hidden="true"></span>
+                </button>
+              </div>
+            </section>
+
+            <section class="panel" aria-labelledby="out-title" aria-live="polite">
+              <h2 class="panel-title" id="out-title"><span class="panel-idx">B</span> Resultado del análisis</h2>
+              <div id="results" class="results">
+                <div class="empty">
+                  <svg viewBox="0 0 48 48" aria-hidden="true">
+                    <path d="M24 5l15 6v11c0 9.4-6.3 16.3-15 20-8.7-3.7-15-10.6-15-20V11z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                    <path d="M17 24l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <p>Aquí aparecerán las placas detectadas y sus alertas.</p>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel compare" id="compare" hidden aria-labelledby="cmp-title">
+            <div class="compare-head">
+              <h2 class="panel-title" id="cmp-title"><span class="panel-idx">C</span> Comparación</h2>
+              <div class="timings" id="timings"></div>
+            </div>
+            <div class="compare-grid">
+              <figure>
+                <button type="button" class="zoomable" data-target="imgOriginal" aria-label="Ampliar imagen original">
+                  <img id="imgOriginal" alt="Imagen original">
+                </button>
+                <figcaption>Original</figcaption>
+              </figure>
+              <figure>
+                <button type="button" class="zoomable" data-target="imgAnotada" aria-label="Ampliar imagen con la detección">
+                  <img id="imgAnotada" alt="Imagen con la placa detectada">
+                </button>
+                <figcaption>Detección</figcaption>
+              </figure>
+            </div>
+          </section>
+        </section>
+
+        <!-- ---------- Vista: registro de sesión ---------- -->
+        <section class="view" data-view="registro" aria-labelledby="t-registro" hidden>
+          <header class="view-head">
+            <div>
+              <h1 id="t-registro">Registro de sesión</h1>
+              <p class="view-desc">Lecturas realizadas desde que abriste la página. Se borran al recargar.</p>
+            </div>
+            <button type="button" class="chip-btn" id="btnLimpiarLog">Vaciar registro</button>
+          </header>
+
+          <div class="stats" role="group" aria-label="Resumen de la sesión">
+            <div class="stat"><span>Imágenes analizadas</span><b id="stImagenes">0</b></div>
+            <div class="stat"><span>Placas leídas</span><b id="stPlacas">0</b></div>
+            <div class="stat stat--alert"><span>Alertas</span><b id="stAlertas">0</b></div>
+          </div>
+
+          <section class="panel">
+            <div class="empty empty--sm" id="logVacio">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 14h24M12 24h24M12 34h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <p>Todavía no hay lecturas. Analiza una imagen para empezar.</p>
+            </div>
+            <ul id="logList" class="log-list"></ul>
+          </section>
+        </section>
+
+        <!-- ---------- Vista: vehículos registrados ---------- -->
+        <section class="view" data-view="vehiculos" aria-labelledby="t-vehiculos" hidden>
+          <header class="view-head">
+            <div>
+              <h1 id="t-vehiculos">Vehículos registrados</h1>
+              <p class="view-desc">Registros de interés con los que se compara cada placa leída. En esta etapa son datos simulados de un archivo local.</p>
+            </div>
+            <label class="search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="search" id="vehFiltro" placeholder="Buscar placa, marca o estado" aria-label="Buscar vehículo">
+            </label>
+          </header>
+
+          <section class="panel">
+            <div class="empty empty--sm" id="vehVacio" hidden><p></p></div>
+            <ul id="vehLista" class="veh-list"></ul>
+          </section>
+        </section>
+
+        <!-- ---------- Vista: acerca del sistema ---------- -->
+        <section class="view" data-view="acerca" aria-labelledby="t-acerca" hidden>
+          <header class="view-head">
+            <div>
+              <h1 id="t-acerca">Acerca del sistema</h1>
+              <p class="view-desc">
+                CERCO IA localiza la placa en una imagen, lee sus caracteres y los contrasta con
+                registros de multas, robos y requisitorias para avisar al operador.
+              </p>
+            </div>
+          </header>
+
+          <ol class="steps">
+            <li class="step">
+              <span class="step-num">01</span>
+              <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M12 9v6M9 12h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <h3>Detecta</h3>
+              <p>YOLO11 localiza la placa dentro de la imagen, incluso con varios vehículos.</p>
+            </li>
+            <li class="step">
+              <span class="step-num">02</span>
+              <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="18" cy="18" r="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+              <h3>Lee</h3>
+              <p>PaddleOCR extrae los caracteres y se valida el formato de placa peruana.</p>
+            </li>
+            <li class="step">
+              <span class="step-num">03</span>
+              <svg class="step-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 7.7-7.5 9.5-4.4-1.8-7.5-5.1-7.5-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 12l2.2 2.2L15.5 10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <h3>Verifica</h3>
+              <p>Compara con los registros de interés y clasifica el estado. En esta etapa se usan datos simulados.</p>
+            </li>
+          </ol>
+
+          <div class="metrics" role="group" aria-label="Métricas del modelo de detección">
+            <div class="metric"><b>94,9 %</b><span>mAP@50</span></div>
+            <div class="metric"><b>92,3 %</b><span>Recall</span></div>
+            <div class="metric"><b>88,1 %</b><span>Precisión</span></div>
+            <p class="metrics-note">Métricas del modelo de detección de placas (YOLO11m) sobre su conjunto de validación. La lectura de caracteres se evalúa aparte.</p>
+          </div>
+
+          <aside class="notice">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 8v5M12 16.5v.01" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            <p><b>Prototipo académico.</b> Una coincidencia es una ayuda para el operador: debe verificarse contra la imagen antes de actuar.</p>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="lightbox" aria-label="Imagen ampliada">
+    <button type="button" class="lightbox-close" id="lightboxClose" aria-label="Cerrar">×</button>
+    <img id="lightboxImg" alt="">
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="/static/app.js"></script>
 </body>

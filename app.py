@@ -19,6 +19,10 @@ def cargar_vehiculos():
 def index():
     return render_template("index.html")
 
+@app.route("/api/vehiculos")
+def listar_vehiculos():
+    return jsonify({"vehiculos": cargar_vehiculos()})
+
 @app.route("/temp_files/<filename>")
 def temp_file(filename):
     return send_from_directory(TEMP_DIR, filename)
