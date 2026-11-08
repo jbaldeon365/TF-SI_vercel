@@ -53,6 +53,7 @@
 
       <div class="side-foot">
         <span class="status-pill"><i class="dot" aria-hidden="true"></i> Prototipo · Etapa 1</span>
+        <p class="live" id="liveEstado"><i class="dot" aria-hidden="true"></i><span>Sin conexión en vivo</span></p>
         <p>YOLO11 · PaddleOCR · Flask</p>
       </div>
     </aside>
@@ -171,7 +172,10 @@
               <h1 id="t-registro">Registro de sesión</h1>
               <p class="view-desc">Historial guardado en la base de datos, con una fila por placa. El contador indica cuántas veces se leyó la placa.</p>
             </div>
-            <button type="button" class="chip-btn" id="btnLimpiarLog">Vaciar registro</button>
+            <label class="search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="search" id="logFiltro" placeholder="Buscar placa" aria-label="Buscar placa en el registro" autocomplete="off">
+            </label>
           </header>
 
           <div class="stats" role="group" aria-label="Resumen de la sesión">
@@ -267,8 +271,11 @@
     <div id="detalleCuerpo"></div>
   </dialog>
 
+  <div class="live-alerts" id="alertas" aria-live="assertive"></div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

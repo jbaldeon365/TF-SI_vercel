@@ -48,7 +48,7 @@
     timings: $("#timings"),
     logVacio: $("#logVacio"),
     logList: $("#logList"),
-    limpiarLog: $("#btnLimpiarLog"),
+    logFiltro: $("#logFiltro"),
     navConteo: $("#navConteo"),
     stImagenes: $("#stImagenes"),
     stPlacas: $("#stPlacas"),
@@ -60,6 +60,8 @@
     vehLista: $("#vehLista"),
     vehVacio: $("#vehVacio"),
     vehFiltro: $("#vehFiltro"),
+    live: $("#liveEstado"),
+    alertas: $("#alertas"),
     detalle: $("#detalle"),
     detalleCuerpo: $("#detalleCuerpo"),
     detalleCerrar: $("#detalleCerrar"),
@@ -407,7 +409,8 @@
   // ---------- historial (guardado en MongoDB) ----------
   async function cargarHistorial() {
     try {
-      const respuesta = await fetch("/api/historial");
+      const q = el.logFiltro.value.trim();
+      const respuesta = await fetch(`/api/historial?q=${encodeURIComponent(q)}`);
       const json = await respuesta.json();
       if (!json.success) throw new Error(json.error);
       pintarRegistro(json.filas, json.stats);
@@ -421,7 +424,12 @@
 
   function pintarRegistro(filas, stats) {
     el.logVacio.hidden = filas.length > 0;
-    if (!filas.length) el.logVacio.querySelector("p").textContent = "Todavía no hay lecturas. Analiza una imagen para empezar.";
+    const q = el.logFiltro.value.trim();
+    if (!filas.length) {
+      el.logVacio.querySelector("p").textContent = q
+        ? `Ninguna placa coincide con «${q}».`
+        : "Todavía no hay lecturas. Analiza una imagen para empezar.";
+    }
     el.navConteo.hidden = stats.placas === 0;
     el.navConteo.textContent = stats.placas;
     el.stImagenes.textContent = stats.imagenes;
@@ -447,6 +455,52 @@
         <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
       </li>`;
     }).join("");
+  }
+
+  // ---------- alertas en vivo (Flask-SocketIO) ----------
+  const MAX_ALERTAS = 4;
+
+  function estadoEnVivo(conectado) {
+    el.live.classList.toggle("is-on", conectado);
+    el.live.querySelector("span").textContent = conectado ? "En vivo" : "Sin conexión en vivo";
+  }
+
+  function mostrarAlerta(a) {
+    const estado = ESTADOS[a.estado] || ESTADO_OTRO;
+    const vehiculo = [a.marca, a.modelo, a.color].filter(Boolean).join(" · ");
+    const hora = a.fecha ? new Date(a.fecha).toLocaleTimeString("es-PE", { hour12: false }) : "";
+    const nodo = document.createElement("article");
+    nodo.className = `live-alert tone-${estado.tono}`;
+    nodo.setAttribute("role", "alert");
+    nodo.innerHTML = `
+      <div class="live-top">
+        <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
+        <span class="live-hora">${esc(hora)}</span>
+        <button type="button" class="live-close" aria-label="Cerrar alerta">×</button>
+      </div>
+      <div class="live-body">
+        ${a.imagen ? `<img class="live-img" src="${esc(a.imagen)}" alt="">` : ""}
+        <div>
+          <div class="plate"><small>PERÚ</small><span>${esc(formatoPlaca(a.placa, true))}</span></div>
+          ${vehiculo ? `<p class="live-veh">${esc(vehiculo)}</p>` : ""}
+        </div>
+      </div>
+      ${a.descripcion ? `<p class="live-desc">${esc(a.descripcion)}</p>` : ""}
+      <button type="button" class="chip-btn live-ver" data-placa="${esc(a.placa_norm || "")}">Ver detalle</button>`;
+    el.alertas.prepend(nodo);
+    while (el.alertas.children.length > MAX_ALERTAS) el.alertas.lastElementChild.remove();
+  }
+
+  function conectarEnVivo() {
+    if (typeof io === "undefined") {
+      estadoEnVivo(false);
+      return;
+    }
+    const socket = io();
+    socket.on("connect", () => estadoEnVivo(true));
+    socket.on("disconnect", () => estadoEnVivo(false));
+    socket.on("alerta", mostrarAlerta);
+    socket.on("lectura", cargarHistorial);
   }
 
   // ---------- detalle de una placa ----------
@@ -596,16 +650,11 @@
   el.lightboxClose.addEventListener("click", () => el.lightbox.close());
   el.lightbox.addEventListener("click", (e) => { if (e.target === el.lightbox) el.lightbox.close(); });
 
-  el.limpiarLog.addEventListener("click", async () => {
-    if (!confirm("¿Borrar todo el historial guardado en la base de datos? No se puede deshacer.")) return;
-    try {
-      const respuesta = await fetch("/api/historial", { method: "DELETE" });
-      if (!(await respuesta.json()).success) throw new Error("falló");
-      aviso("Historial vaciado");
-    } catch (error) {
-      aviso("No se pudo vaciar el historial.", true);
-    }
-    cargarHistorial();
+  // Búsqueda de placas en el registro (consulta todo el historial, con una pequeña espera al teclear)
+  let temporizadorBusqueda = null;
+  el.logFiltro.addEventListener("input", () => {
+    clearTimeout(temporizadorBusqueda);
+    temporizadorBusqueda = setTimeout(cargarHistorial, 250);
   });
 
   // Detalle de una placa del registro
@@ -631,6 +680,15 @@
   el.detalleCerrar.addEventListener("click", () => el.detalle.close());
   el.detalle.addEventListener("click", (e) => { if (e.target === el.detalle) el.detalle.close(); });
 
+  // Alertas en vivo
+  el.alertas.addEventListener("click", (e) => {
+    const nodo = e.target.closest(".live-alert");
+    if (!nodo) return;
+    const ver = e.target.closest(".live-ver");
+    if (ver) abrirDetalle(ver.dataset.placa);
+    if (ver || e.target.closest(".live-close")) nodo.remove();
+  });
+
   // Barra lateral y vistas
   window.addEventListener("hashchange", mostrarVista);
   el.menu.addEventListener("click", abrirMenu);
@@ -640,4 +698,5 @@
 
   cargarHistorial();
   mostrarVista();
+  conectarEnVivo();
 })();

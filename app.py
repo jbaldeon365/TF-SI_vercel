@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask_socketio import SocketIO
 from werkzeug.utils import secure_filename
 import os
+import re
 import shutil
 import uuid
 from datetime import datetime, timezone
@@ -9,6 +11,8 @@ from placas import normalizar_placa, validar_placa
 from db import obtener_db, asegurar_indices
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+# Canal en vivo: avisa a todas las pestañas conectadas cuando hay una alerta
+socketio = SocketIO(app, async_mode="threading")
 
 # Ancho mínimo (px) del recuadro de una placa para poder leerla
 ANCHO_PLACA_LEGIBLE = 80
@@ -83,13 +87,39 @@ def listar_vehiculos():
 ESTADOS_ALERTA = ["robado", "denunciado", "sospechoso"]
 
 
+def emitir_eventos(resultados, imagen_anotada):
+    # Avisa en vivo a todos los clientes conectados; un fallo aquí no debe romper el análisis
+    try:
+        ahora = datetime.now(timezone.utc).isoformat()
+        for r in resultados:
+            if r["estado"] in ESTADOS_ALERTA:
+                socketio.emit("alerta", {
+                    "placa": r["placa"],
+                    "placa_norm": normalizar_placa(r["placa"]),
+                    "estado": r["estado"],
+                    "marca": r.get("marca"),
+                    "modelo": r.get("modelo"),
+                    "color": r.get("color") or r.get("color_estimado"),
+                    "descripcion": r.get("descripcion"),
+                    "fecha": ahora,
+                    "imagen": f"/capturas/{imagen_anotada}" if imagen_anotada else None,
+                })
+        # Las demás pestañas actualizan su registro
+        socketio.emit("lectura", {"total": len(resultados)})
+    except Exception as e:
+        print(f"No se pudieron emitir los eventos en vivo: {e}")
+
+
 @app.route("/api/historial")
 def historial():
     try:
         det = obtener_db().detecciones
+        # Búsqueda opcional por placa (sin guiones ni espacios, contiene el texto)
+        buscado = re.sub(r"[^A-Z0-9]", "", request.args.get("q", "").upper())
+        filtro = {"placa_norm": {"$regex": re.escape(buscado)}} if buscado else {"placa_norm": {"$ne": None}}
         # Una fila por placa: último estado, cuántas veces se leyó y si su estado cambió
         filas = list(det.aggregate([
-            {"$match": {"placa_norm": {"$ne": None}}},
+            {"$match": filtro},
             {"$sort": {"fecha": -1}},
             {"$group": {
                 "_id": "$placa_norm",
@@ -138,21 +168,6 @@ def detalle_placa(placa_norm):
     except Exception as e:
         print(f"Error leyendo el detalle: {e}")
         return jsonify({"success": False, "error": "No se pudo leer el detalle."}), 500
-
-
-@app.route("/api/historial", methods=["DELETE"])
-def vaciar_historial():
-    try:
-        obtener_db().detecciones.delete_many({})
-        for nombre in os.listdir(CAPTURAS_DIR):  # las imágenes del historial se borran con él
-            try:
-                os.remove(os.path.join(CAPTURAS_DIR, nombre))
-            except OSError:
-                pass
-        return jsonify({"success": True})
-    except Exception as e:
-        print(f"Error vaciando el historial: {e}")
-        return jsonify({"success": False, "error": "No se pudo vaciar el historial."}), 500
 
 
 @app.route("/capturas/<filename>")
@@ -260,6 +275,7 @@ def upload_image():
         analisis_id = uuid.uuid4().hex
         imagen_original, imagen_anotada = archivar_capturas(filepath, annotated_path, analisis_id)
         guardar_detecciones(resultados, analisis_id, imagen_original, imagen_anotada)
+        emitir_eventos(resultados, imagen_anotada)
 
         annotated_filename = os.path.basename(annotated_path) if annotated_path else None
 
@@ -276,4 +292,4 @@ def upload_image():
 if __name__ == "__main__":
     asegurar_indices()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    socketio.run(app, host="0.0.0.0", port=port, debug=True, allow_unsafe_werkzeug=True)
