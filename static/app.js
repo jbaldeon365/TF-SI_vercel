@@ -49,6 +49,19 @@
     logVacio: $("#logVacio"),
     logList: $("#logList"),
     logFiltro: $("#logFiltro"),
+    kpiLecturas: $("#kpiLecturas"),
+    kpiPlacas: $("#kpiPlacas"),
+    kpiAlertas: $("#kpiAlertas"),
+    kpiVehiculos: $("#kpiVehiculos"),
+    sys: $("#sysEstado"),
+    recList: $("#recList"),
+    recVacio: $("#recVacio"),
+    panDias: $("#panDias"),
+    panEstados: $("#panEstados"),
+    panAlertas: $("#panAlertas"),
+    panAlertasVacio: $("#panAlertasVacio"),
+    panTop: $("#panTop"),
+    panTopVacio: $("#panTopVacio"),
     logChips: $("#logChips"),
     navConteo: $("#navConteo"),
     stImagenes: $("#stImagenes"),
@@ -154,24 +167,35 @@
     reiniciarResultados();
   }
 
-  function reiniciarResultados() {
-    el.compare.hidden = true;
-    el.results.innerHTML = `
-      <div class="empty">
-        <svg viewBox="0 0 48 48" aria-hidden="true">
-          <path d="M24 5l15 6v11c0 9.4-6.3 16.3-15 20-8.7-3.7-15-10.6-15-20V11z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-          <path d="M17 24l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <p>${archivo ? "Imagen lista. Pulsa «Analizar imagen»." : "Aquí aparecerán las placas detectadas y sus alertas."}</p>
+  const PASOS = [
+    ["Detección de placa", "YOLO11 localiza la placa en la imagen"],
+    ["Lectura de caracteres", "PaddleOCR lee el texto de la placa"],
+    ["Verificación", "Se consulta la lista de vehículos"],
+  ];
+
+  function vacioResultados() {
+    return `
+      <div class="idle">
+        <p class="idle-title">${archivo ? "Imagen lista para analizar" : "Esperando una imagen"}</p>
+        <p class="idle-sub">${archivo ? "Pulsa «Analizar imagen» para iniciar." : "Carga una imagen para iniciar el análisis."}</p>
+        <ol class="pipe">
+          ${PASOS.map(([titulo, detalle], i) => `
+            <li><span class="pipe-n">${i + 1}</span><div><b>${titulo}</b><span>${detalle}</span></div></li>`).join("")}
+        </ol>
       </div>`;
   }
 
+  function reiniciarResultados() {
+    el.compare.hidden = true;
+    el.results.innerHTML = vacioResultados();
+  }
+
   // ---------- navegación entre vistas ----------
-  const VISTAS = ["analisis", "registro", "vehiculos", "acerca"];
+  const VISTAS = ["panel", "analisis", "registro", "vehiculos", "acerca"];
 
   function vistaActual() {
     const nombre = location.hash.replace("#", "");
-    return VISTAS.includes(nombre) ? nombre : "analisis";
+    return VISTAS.includes(nombre) ? nombre : "panel";
   }
 
   function mostrarVista() {
@@ -187,6 +211,7 @@
     window.scrollTo(0, 0);
     if (nombre === "vehiculos") cargarVehiculos();
     if (nombre === "registro") cargarHistorial();
+    if (nombre === "panel") cargarPanel();
   }
 
   function irAnalisis() {
@@ -405,6 +430,7 @@
     el.compare.hidden = !json.annotated;
 
     cargarHistorial();
+    actualizarPanel();
   }
 
   // ---------- historial (guardado en MongoDB) ----------
@@ -446,26 +472,7 @@
     el.stImagenes.textContent = stats.imagenes;
     el.stPlacas.textContent = stats.placas;
     el.stAlertas.textContent = stats.alertas;
-    const fechaCorta = (iso) => iso
-      ? new Date(iso).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
-      : "—";
-    el.logList.innerHTML = filas.map((f) => {
-      const estado = estadoDe(f);
-      const repetida = f.veces > 1;
-      const cambio = (f.estados || []).length > 1;
-      const detalle = `Primera lectura: ${fechaCorta(f.primera)}
-Última lectura: ${fechaCorta(f.ultima)}`;
-      return `
-      <li class="tone-${estado.tono} is-click" role="button" tabindex="0" data-placa="${esc(f.placa_norm || "")}" aria-label="Ver detalle de ${esc(f.placa || "la placa")}">
-        <span class="log-time" title="Última lectura">${esc(fechaCorta(f.ultima))}</span>
-        <span class="log-main">
-          <span class="log-plate">${esc(formatoPlaca(f.placa, f.valida !== false) || "—")}</span>
-          ${repetida ? `<span class="rep" title="${esc(detalle)}">×${f.veces}</span>` : ""}
-          ${cambio ? `<span class="rep rep--change" title="Esta placa tuvo distintos estados en sus lecturas">Estado cambió</span>` : ""}
-        </span>
-        <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
-      </li>`;
-    }).join("");
+    el.logList.innerHTML = filas.map(filaLectura).join("");
   }
 
   // ---------- alertas en vivo (Flask-SocketIO) ----------
@@ -511,7 +518,140 @@
     socket.on("connect", () => estadoEnVivo(true));
     socket.on("disconnect", () => estadoEnVivo(false));
     socket.on("alerta", mostrarAlerta);
-    socket.on("lectura", cargarHistorial);
+    socket.on("lectura", () => { cargarHistorial(); actualizarPanel(); });
+  }
+
+  // ---------- panel de control: estado, resumen del día y últimas lecturas ----------
+  // Fila de una placa del historial (la usan «Últimas lecturas» y el registro de sesión)
+  function filaLectura(f) {
+    const estado = estadoDe(f);
+    const vehiculo = [[f.marca, f.modelo].filter(Boolean).join(" "), f.color || f.color_estimado].filter(Boolean).join(" · ");
+    const fecha = (iso) => iso
+      ? new Date(iso).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+      : "—";
+    const detalle = `Primera lectura: ${fecha(f.primera)}\nÚltima lectura: ${fecha(f.ultima)}`;
+    const miniatura = f.imagen
+      ? `<img src="${esc(f.imagen)}" alt="" loading="lazy">`
+      : `<span class="rec-nofoto" aria-hidden="true">${ICONOS.lupa}</span>`;
+    const repetida = f.veces > 1;
+    const cambio = (f.estados || []).length > 1;
+    return `
+      <li class="tone-${estado.tono} is-click" role="button" tabindex="0" data-placa="${esc(f.placa_norm || "")}" aria-label="Ver detalle de ${esc(f.placa || "la placa")}">
+        <span class="rec-thumb">${miniatura}</span>
+        <span class="rec-main">
+          <span class="rec-top">
+            <b class="log-plate">${esc(formatoPlaca(f.placa, f.valida !== false) || "—")}</b>
+            ${repetida ? `<span class="rep" title="${esc(detalle)}">×${f.veces}</span>` : ""}
+            ${cambio ? `<span class="rep rep--change" title="Esta placa tuvo distintos estados en sus lecturas">Estado cambió</span>` : ""}
+          </span>
+          <span class="rec-sub">${esc(vehiculo || "Sin datos del vehículo")}</span>
+        </span>
+        <span class="rec-hora" title="${esc(detalle)}">${esc(hace(f.ultima))}</span>
+        <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
+      </li>`;
+  }
+
+  function hace(iso) {
+    if (!iso) return "—";
+    const seg = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (seg < 60) return "hace unos segundos";
+    if (seg < 3600) return `hace ${Math.floor(seg / 60)} min`;
+    if (seg < 86400) return `hace ${Math.floor(seg / 3600)} h`;
+    return new Date(iso).toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit" });
+  }
+
+  async function cargarEstado() {
+    let datos = null;
+    try {
+      datos = await (await fetch("/api/estado")).json();
+    } catch (error) {
+      console.error("No se pudo leer el estado del sistema:", error);
+    }
+    el.sys.querySelectorAll(".sys-item").forEach((item) => {
+      item.classList.toggle("is-ok", Boolean(datos && datos[item.dataset.k]));
+    });
+    const valor = (v) => (datos && v != null ? v : "—");
+    el.kpiLecturas.textContent = valor(datos && datos.lecturas_hoy);
+    el.kpiPlacas.textContent = valor(datos && datos.placas_hoy);
+    el.kpiAlertas.textContent = valor(datos && datos.alertas_hoy);
+    el.kpiVehiculos.textContent = valor(datos && datos.vehiculos);
+  }
+
+  async function cargarRecientes() {
+    try {
+      const json = await (await fetch("/api/historial")).json();
+      if (!json.success) throw new Error(json.error);
+      const filas = json.filas.slice(0, 3);
+      el.recVacio.hidden = filas.length > 0;
+      el.recList.innerHTML = filas.map(filaLectura).join("");
+    } catch (error) {
+      console.error("No se pudieron cargar las últimas lecturas:", error);
+    }
+  }
+
+  function actualizarPanel() {
+    cargarEstado();
+    cargarRecientes();
+    if (vistaActual() === "panel") cargarPanel();
+  }
+
+  // ---------- panel de inicio ----------
+  const DIAS_SEMANA = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+  const ORDEN_ESTADOS = ["robado", "denunciado", "sospechoso", "normal", "desconocido", "invalida"];
+
+  async function cargarPanel() {
+    try {
+      const d = await (await fetch("/api/panel")).json();
+      if (!d.success) throw new Error(d.error);
+      pintarPanel(d);
+    } catch (error) {
+      console.error("No se pudo cargar el panel:", error);
+    }
+  }
+
+  function pintarPanel(d) {
+    // Lecturas por día: la barra es el total y la parte naranja son las alertas
+    const maximo = Math.max(1, ...d.por_dia.map((x) => x.lecturas));
+    el.panDias.innerHTML = d.por_dia.map((x) => {
+      const alto = Math.round((x.lecturas / maximo) * 100);
+      const altoAlertas = x.lecturas ? Math.round((x.alertas / x.lecturas) * 100) : 0;
+      const fecha = new Date(`${x.dia}T12:00:00`);
+      return `
+        <div class="bar-col" title="${x.lecturas} lecturas, ${x.alertas} alertas">
+          <span class="bar-val">${x.lecturas}</span>
+          <div class="bar-track"><div class="bar" style="height:${alto}%"><i style="height:${altoAlertas}%"></i></div></div>
+          <span class="bar-lbl">${DIAS_SEMANA[fecha.getDay()]} ${fecha.getDate()}</span>
+        </div>`;
+    }).join("");
+
+    // Lecturas por estado
+    const total = Math.max(1, ...ORDEN_ESTADOS.map((e) => d.por_estado[e] || 0));
+    el.panEstados.innerHTML = ORDEN_ESTADOS.map((clave) => {
+      const estado = ESTADOS[clave];
+      const n = d.por_estado[clave] || 0;
+      return `
+        <li class="tone-${estado.tono}">
+          <span class="dist-lbl">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
+          <span class="dist-bar"><span style="width:${Math.round((n / total) * 100)}%"></span></span>
+          <b>${n}</b>
+        </li>`;
+    }).join("");
+
+    // Últimas alertas
+    el.panAlertasVacio.hidden = d.ultimas_alertas.length > 0;
+    el.panAlertas.innerHTML = d.ultimas_alertas.map(filaLectura).join("");
+
+    // Placas más repetidas
+    el.panTopVacio.hidden = d.top_placas.length > 0;
+    el.panTop.innerHTML = d.top_placas.map((f) => {
+      const estado = estadoDe(f);
+      return `
+        <li class="tone-${estado.tono} is-click" role="button" tabindex="0" data-placa="${esc(f.placa_norm || "")}" aria-label="Ver detalle de ${esc(f.placa || "la placa")}">
+          <div class="plate plate--sm"><small>PERÚ</small><span>${esc(formatoPlaca(f.placa, f.valida !== false))}</span></div>
+          <span class="rec-main"><b>${f.veces} lecturas</b></span>
+          <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
+        </li>`;
+    }).join("");
   }
 
   // ---------- detalle de una placa ----------
@@ -696,6 +836,30 @@
     const imagen = e.target.closest(".det-zoom img");
     if (imagen) { el.lightboxImg.src = imagen.src; el.lightbox.showModal(); }
   });
+  el.recList.addEventListener("click", (e) => {
+    const fila = e.target.closest("li[data-placa]");
+    if (fila) abrirDetalle(fila.dataset.placa);
+  });
+  el.recList.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const fila = e.target.closest("li[data-placa]");
+    if (!fila) return;
+    e.preventDefault();
+    abrirDetalle(fila.dataset.placa);
+  });
+  [el.panAlertas, el.panTop].forEach((lista) => {
+    lista.addEventListener("click", (e) => {
+      const fila = e.target.closest("li[data-placa]");
+      if (fila) abrirDetalle(fila.dataset.placa);
+    });
+    lista.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const fila = e.target.closest("li[data-placa]");
+      if (!fila) return;
+      e.preventDefault();
+      abrirDetalle(fila.dataset.placa);
+    });
+  });
   el.detalleCerrar.addEventListener("click", () => el.detalle.close());
   el.detalle.addEventListener("click", (e) => { if (e.target === el.detalle) el.detalle.close(); });
 
@@ -715,7 +879,10 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarMenu(); });
   el.vehFiltro.addEventListener("input", pintarVehiculos);
 
+  reiniciarResultados();
   cargarHistorial();
+  actualizarPanel();
+  setInterval(cargarEstado, 30000);
   mostrarVista();
   conectarEnVivo();
 })();

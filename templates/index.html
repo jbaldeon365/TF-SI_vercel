@@ -15,7 +15,7 @@
   <div class="app">
     <!-- ===================== BARRA LATERAL ===================== -->
     <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
-      <a class="brand" href="#analisis" aria-label="CERCO IA, inicio">
+      <a class="brand" href="#panel" aria-label="CERCO IA, inicio">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
           <path d="M16 3.5l10 3.9v8.1c0 5.8-4.1 10.2-10 12.9-5.9-2.7-10-7.1-10-12.9V7.4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
           <path d="M11 16.2l3.3 3.3L21.2 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -28,6 +28,10 @@
 
       <nav class="side-nav">
         <p class="side-group">Operación</p>
+        <a class="side-link" href="#panel" data-view="panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="4" width="7" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="11" width="7" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+          <span>Panel</span>
+        </a>
         <a class="side-link" href="#analisis" data-view="analisis">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M12 9v6M9 12h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Análisis de imagen</span>
@@ -75,22 +79,68 @@
 
       <main class="content" id="contenido" tabindex="-1">
 
+        <!-- ---------- Vista: panel ---------- -->
+        <section class="view" data-view="panel" aria-labelledby="t-panel">
+          <header class="view-head">
+            <div>
+              <h1 id="t-panel">Panel</h1>
+              <p class="view-desc">Resumen de la actividad del sistema de reconocimiento de placas.</p>
+            </div>
+            <div class="sys" id="sysEstado" role="status" aria-label="Estado del sistema">
+              <span class="sys-item" data-k="servidor"><i class="dot" aria-hidden="true"></i>Servidor</span>
+              <span class="sys-item" data-k="base_datos"><i class="dot" aria-hidden="true"></i>Base de datos</span>
+              <span class="sys-item" data-k="modelos"><i class="dot" aria-hidden="true"></i>Modelos</span>
+            </div>
+          </header>
+
+          <div class="kpis" role="group" aria-label="Resumen del día">
+            <div class="kpi"><span>Lecturas hoy</span><b id="kpiLecturas">—</b></div>
+            <div class="kpi"><span>Placas distintas hoy</span><b id="kpiPlacas">—</b></div>
+            <div class="kpi kpi--alert"><span>Alertas hoy</span><b id="kpiAlertas">—</b></div>
+            <div class="kpi"><span>Vehículos en lista</span><b id="kpiVehiculos">—</b></div>
+          </div>
+
+          <div class="pan-grid">
+            <section class="panel" aria-labelledby="pan-dias">
+              <h2 class="panel-title" id="pan-dias">Lecturas de los últimos 7 días</h2>
+              <div class="bars" id="panDias"></div>
+              <p class="legend"><i class="lg lg--a"></i>Lecturas <i class="lg lg--b"></i>Alertas</p>
+            </section>
+            <section class="panel" aria-labelledby="pan-estados">
+              <h2 class="panel-title" id="pan-estados">Lecturas por estado</h2>
+              <ul class="dist" id="panEstados"></ul>
+            </section>
+          </div>
+
+          <div class="pan-grid pan-grid--wide">
+            <section class="panel" aria-labelledby="pan-alertas">
+              <div class="compare-head">
+                <h2 class="panel-title" id="pan-alertas">Últimas alertas</h2>
+                <a class="chip-btn chip-link" href="#registro">Ir al registro de sesión</a>
+              </div>
+              <div class="empty empty--sm" id="panAlertasVacio"><p>Todavía no hay alertas.</p></div>
+              <ul class="rec-list" id="panAlertas"></ul>
+            </section>
+            <section class="panel" aria-labelledby="pan-top">
+              <h2 class="panel-title" id="pan-top">Placas más repetidas</h2>
+              <div class="empty empty--sm" id="panTopVacio"><p>Aún no hay placas leídas más de una vez.</p></div>
+              <ul class="rec-list top-list" id="panTop"></ul>
+            </section>
+          </div>
+        </section>
+
         <!-- ---------- Vista: análisis ---------- -->
         <section class="view" data-view="analisis" aria-labelledby="t-analisis">
           <header class="view-head">
             <div>
               <h1 id="t-analisis">Análisis de imagen</h1>
-              <p class="view-desc">
-                Sube, arrastra o pega una foto con la placa visible. Las placas muy pequeñas
-                (menos de unos 80 px de ancho) no se pueden leer. Una coincidencia es una ayuda:
-                verifícala contra la imagen antes de actuar.
-              </p>
+              <p class="view-desc">Detecta, lee y verifica las placas de una imagen contra la lista de vehículos.</p>
             </div>
           </header>
 
           <div class="lab-grid">
             <section class="panel" aria-labelledby="in-title">
-              <h2 class="panel-title" id="in-title"><span class="panel-idx">A</span> Imagen de entrada</h2>
+              <h2 class="panel-title" id="in-title">Captura</h2>
 
               <div class="dropzone" id="dropzone" role="button" tabindex="0"
                    aria-label="Elegir, arrastrar o pegar una imagen">
@@ -130,7 +180,7 @@
             </section>
 
             <section class="panel" aria-labelledby="out-title" aria-live="polite">
-              <h2 class="panel-title" id="out-title"><span class="panel-idx">B</span> Resultado del análisis</h2>
+              <h2 class="panel-title" id="out-title">Resultado</h2>
               <div id="results" class="results">
                 <div class="empty">
                   <svg viewBox="0 0 48 48" aria-hidden="true">
@@ -145,7 +195,7 @@
 
           <section class="panel compare" id="compare" hidden aria-labelledby="cmp-title">
             <div class="compare-head">
-              <h2 class="panel-title" id="cmp-title"><span class="panel-idx">C</span> Comparación</h2>
+              <h2 class="panel-title" id="cmp-title">Comparación</h2>
               <div class="timings" id="timings"></div>
             </div>
             <div class="compare-grid">
@@ -162,6 +212,16 @@
                 <figcaption>Detección</figcaption>
               </figure>
             </div>
+          </section>
+          <section class="panel recientes" aria-labelledby="rec-title">
+            <div class="compare-head">
+              <h2 class="panel-title" id="rec-title">Últimas lecturas</h2>
+              <a class="chip-btn chip-link" href="#registro">Ir al registro de sesión</a>
+            </div>
+            <div class="empty empty--sm" id="recVacio">
+              <p>Todavía no hay lecturas. Analiza una imagen para empezar.</p>
+            </div>
+            <ul class="rec-list" id="recList"></ul>
           </section>
         </section>
 
@@ -197,7 +257,7 @@
               <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 14h24M12 24h24M12 34h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
               <p>Todavía no hay lecturas. Analiza una imagen para empezar.</p>
             </div>
-            <ul id="logList" class="log-list"></ul>
+            <ul id="logList" class="rec-list"></ul>
           </section>
         </section>
 

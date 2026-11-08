@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from detector import detect_plate, TEMP_DIR
 from placas import normalizar_placa, validar_placa
 from db import obtener_db, asegurar_indices
@@ -118,6 +118,93 @@ def emitir_eventos(resultados, imagen_anotada):
         print(f"No se pudieron emitir los eventos en vivo: {e}")
 
 
+def _iso(fecha):
+    return fecha.replace(tzinfo=timezone.utc).isoformat() if fecha else None
+
+
+@app.route("/api/panel")
+def panel():
+    # Datos agregados para el panel de inicio
+    try:
+        det = obtener_db().detecciones
+        ahora = datetime.now().astimezone()
+        desfase = ahora.strftime("%z")  # por ejemplo -0500
+        zona = f"{desfase[:3]}:{desfase[3:]}"
+        inicio = (ahora - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Lecturas y alertas por día, últimos 7 días (los días sin datos salen en cero)
+        crudo = {x["_id"]: x for x in det.aggregate([
+            {"$match": {"fecha": {"$gte": inicio.astimezone(timezone.utc)}}},
+            {"$group": {
+                "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$fecha", "timezone": zona}},
+                "lecturas": {"$sum": 1},
+                "alertas": {"$sum": {"$cond": [{"$in": ["$estado", ESTADOS_ALERTA]}, 1, 0]}},
+            }},
+        ])}
+        por_dia = []
+        for i in range(7):
+            dia = (inicio + timedelta(days=i)).strftime("%Y-%m-%d")
+            dato = crudo.get(dia, {})
+            por_dia.append({"dia": dia, "lecturas": dato.get("lecturas", 0), "alertas": dato.get("alertas", 0)})
+
+        por_estado = {x["_id"]: x["n"] for x in det.aggregate([
+            {"$group": {"_id": "$estado", "n": {"$sum": 1}}},
+        ])}
+
+        # Placas que se han leído más de una vez
+        top_placas = list(det.aggregate([
+            {"$match": {"placa_norm": {"$ne": None}}},
+            {"$sort": {"fecha": -1}},
+            {"$group": {
+                "_id": "$placa_norm", "placa_norm": {"$first": "$placa_norm"}, "placa": {"$first": "$placa"},
+                "estado": {"$first": "$estado"}, "valida": {"$first": "$valida"}, "veces": {"$sum": 1},
+            }},
+            {"$match": {"veces": {"$gte": 2}}},
+            {"$sort": {"veces": -1}},
+            {"$limit": 5},
+            {"$project": {"_id": 0}},
+        ]))
+
+        # Últimas alertas, con la misma forma que las filas del historial
+        ultimas_alertas = []
+        for d in det.find({"estado": {"$in": ESTADOS_ALERTA}}, {"_id": 0}).sort("fecha", -1).limit(5):
+            nombre = d.get("imagen_anotada")
+            ultimas_alertas.append({
+                "placa": d.get("placa"), "placa_norm": d.get("placa_norm"), "estado": d.get("estado"),
+                "valida": d.get("valida", True), "ultima": _iso(d.get("fecha")), "primera": _iso(d.get("fecha")),
+                "veces": 1, "estados": [d.get("estado")],
+                "imagen": f"/capturas/{nombre}" if nombre else None,
+                "marca": d.get("marca"), "modelo": d.get("modelo"),
+                "color": d.get("color"), "color_estimado": d.get("color_estimado"),
+            })
+
+        return jsonify({"success": True, "por_dia": por_dia, "por_estado": por_estado,
+                        "top_placas": top_placas, "ultimas_alertas": ultimas_alertas})
+    except Exception as e:
+        print(f"Error armando el panel: {e}")
+        return jsonify({"success": False, "error": "No se pudo leer el panel."}), 500
+
+
+@app.route("/api/estado")
+def estado_sistema():
+    # Estado de los servicios y resumen del día para el panel de control
+    resumen = {"servidor": True, "modelos": True, "base_datos": False,
+               "vehiculos": None, "lecturas_hoy": None, "placas_hoy": None, "alertas_hoy": None}
+    try:
+        db = obtener_db()
+        db.client.admin.command("ping")
+        resumen["base_datos"] = True
+        inicio = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+        hoy = {"fecha": {"$gte": inicio.astimezone(timezone.utc)}}
+        resumen["vehiculos"] = db.vehiculos.count_documents({})
+        resumen["lecturas_hoy"] = db.detecciones.count_documents(hoy)
+        resumen["placas_hoy"] = len(db.detecciones.distinct("placa_norm", hoy))
+        resumen["alertas_hoy"] = db.detecciones.count_documents({**hoy, "estado": {"$in": ESTADOS_ALERTA}})
+    except Exception as e:
+        print(f"Estado: la base de datos no responde: {e}")
+    return jsonify(resumen)
+
+
 @app.route("/api/historial")
 def historial():
     try:
@@ -140,6 +227,11 @@ def historial():
                 "primera": {"$last": "$fecha"},
                 "veces": {"$sum": 1},
                 "estados": {"$addToSet": "$estado"},
+                "imagen_anotada": {"$first": "$imagen_anotada"},
+                "marca": {"$first": "$marca"},
+                "modelo": {"$first": "$modelo"},
+                "color": {"$first": "$color"},
+                "color_estimado": {"$first": "$color_estimado"},
             }},
         ]
         # Fichas por estado: las filas se filtran y los conteos se calculan sobre la búsqueda por placa
@@ -167,6 +259,9 @@ def historial():
             for campo in ("ultima", "primera"):
                 fecha = f.get(campo)
                 f[campo] = fecha.replace(tzinfo=timezone.utc).isoformat() if fecha else None
+        for f in filas:
+            nombre = f.pop("imagen_anotada", None)
+            f["imagen"] = f"/capturas/{nombre}" if nombre else None
         stats = {
             "imagenes": len(det.distinct("analisis_id")),
             "placas": len(det.distinct("placa_norm")),
