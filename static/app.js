@@ -62,6 +62,21 @@
     panAlertasVacio: $("#panAlertasVacio"),
     panTop: $("#panTop"),
     panTopVacio: $("#panTopVacio"),
+    evFiltro: $("#evFiltro"),
+    evChips: $("#evChips"),
+    evGrid: $("#evGrid"),
+    evVacio: $("#evVacio"),
+    evNota: $("#evNota"),
+    repDesde: $("#repDesde"),
+    repHasta: $("#repHasta"),
+    repEstado: $("#repEstado"),
+    repCsv: $("#repCsv"),
+    repLecturas: $("#repLecturas"),
+    repPlacas: $("#repPlacas"),
+    repAlertas: $("#repAlertas"),
+    repNoValidas: $("#repNoValidas"),
+    repPlaca: $("#repPlaca"),
+    repFicha: $("#repFicha"),
     logChips: $("#logChips"),
     navConteo: $("#navConteo"),
     stImagenes: $("#stImagenes"),
@@ -191,7 +206,7 @@
   }
 
   // ---------- navegación entre vistas ----------
-  const VISTAS = ["panel", "analisis", "registro", "vehiculos", "acerca"];
+  const VISTAS = ["panel", "analisis", "registro", "vehiculos", "evidencias", "reportes", "acerca"];
 
   function vistaActual() {
     const nombre = location.hash.replace("#", "");
@@ -212,6 +227,8 @@
     if (nombre === "vehiculos") cargarVehiculos();
     if (nombre === "registro") cargarHistorial();
     if (nombre === "panel") cargarPanel();
+    if (nombre === "evidencias") cargarEvidencias();
+    if (nombre === "reportes") actualizarReporte();
   }
 
   function irAnalisis() {
@@ -654,6 +671,96 @@
     }).join("");
   }
 
+  // ---------- evidencias ----------
+  let filtroEv = "todos";
+
+  async function cargarEvidencias() {
+    try {
+      const q = el.evFiltro.value.trim();
+      const json = await (await fetch(`/api/evidencias?q=${encodeURIComponent(q)}&estado=${filtroEv}`)).json();
+      if (!json.success) throw new Error(json.error);
+      pintarEvidencias(json, q);
+    } catch (error) {
+      console.error("No se pudieron cargar las evidencias:", error);
+      el.evGrid.innerHTML = "";
+      el.evVacio.hidden = false;
+      el.evVacio.querySelector("p").textContent = "No se pudieron cargar las evidencias. Revisa la conexión con la base de datos.";
+    }
+  }
+
+  function tarjetaEvidencia(g) {
+    const peor = g.placas.map(estadoDe).sort((a, b) => a.rango - b.rango)[0] || ESTADO_OTRO;
+    const cuando = g.fecha
+      ? new Date(g.fecha).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
+      : "—";
+    const placas = g.placas.map((p) => {
+      const e = estadoDe(p);
+      return `<button type="button" class="ev-plate tone-${e.tono}" data-placa="${esc(p.placa_norm || "")}" title="${esc(e.etiqueta)}">${esc(formatoPlaca(p.placa, p.valida !== false) || "—")}</button>`;
+    }).join("");
+    return `
+      <article class="ev-card tone-${peor.tono}">
+        <button type="button" class="ev-img" data-src="${esc(g.imagen)}" aria-label="Ampliar la imagen">
+          <img src="${esc(g.imagen)}" alt="" loading="lazy">
+          <span class="badge">${ICONOS[peor.icono]}${esc(peor.etiqueta)}</span>
+        </button>
+        <div class="ev-info">
+          <div class="ev-plates">${placas}</div>
+          <span class="ev-fecha">${esc(cuando)} · ${g.placas.length} ${g.placas.length === 1 ? "placa" : "placas"}</span>
+        </div>
+      </article>`;
+  }
+
+  function pintarEvidencias(d, q) {
+    el.evChips.querySelectorAll(".chip").forEach((chip) => {
+      chip.querySelector("b").textContent = d.conteos[chip.dataset.estado] ?? 0;
+      const activo = chip.dataset.estado === filtroEv;
+      chip.classList.toggle("is-on", activo);
+      chip.setAttribute("aria-pressed", String(activo));
+    });
+    el.evVacio.hidden = d.items.length > 0;
+    if (!d.items.length) {
+      el.evVacio.querySelector("p").textContent = q || filtroEv !== "todos"
+        ? "Ninguna imagen coincide con los filtros."
+        : "Todavía no hay imágenes guardadas. Analiza una imagen para empezar.";
+    }
+    el.evNota.textContent = d.total > d.items.length ? `Mostrando las ${d.items.length} más recientes de ${d.total}.` : "";
+    el.evGrid.innerHTML = d.items.map(tarjetaEvidencia).join("");
+  }
+
+  // ---------- reportes ----------
+  function paramsReporte() {
+    const p = new URLSearchParams();
+    if (el.repDesde.value) p.set("desde", el.repDesde.value);
+    if (el.repHasta.value) p.set("hasta", el.repHasta.value);
+    if (el.repEstado.value !== "todos") p.set("estado", el.repEstado.value);
+    return p.toString();
+  }
+
+  async function actualizarReporte() {
+    const qs = paramsReporte();
+    el.repCsv.href = `/api/reportes/lecturas.csv${qs ? `?${qs}` : ""}`;
+    try {
+      const d = await (await fetch(`/api/reportes/resumen?${qs}`)).json();
+      if (!d.success) throw new Error(d.error);
+      el.repLecturas.textContent = d.lecturas;
+      el.repPlacas.textContent = d.placas;
+      el.repAlertas.textContent = d.alertas;
+      el.repNoValidas.textContent = `${String(d.pct_no_validas).replace(".", ",")} %`;
+    } catch (error) {
+      console.error("No se pudo armar el resumen:", error);
+      [el.repLecturas, el.repPlacas, el.repAlertas, el.repNoValidas].forEach((k) => { k.textContent = "—"; });
+    }
+  }
+
+  function abrirFicha() {
+    const norm = el.repPlaca.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (norm.length < 4) {
+      aviso("Escribe una placa válida.", true);
+      return;
+    }
+    window.open(`/reportes/placa/${norm}`, "_blank", "noopener");
+  }
+
   // ---------- detalle de una placa ----------
   let lecturasDetalle = [];
   let indiceDetalle = 0;
@@ -860,6 +967,30 @@
       abrirDetalle(fila.dataset.placa);
     });
   });
+  // Evidencias
+  let temporizadorEv = null;
+  el.evFiltro.addEventListener("input", () => {
+    clearTimeout(temporizadorEv);
+    temporizadorEv = setTimeout(cargarEvidencias, 250);
+  });
+  el.evChips.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    filtroEv = chip.dataset.estado;
+    cargarEvidencias();
+  });
+  el.evGrid.addEventListener("click", (e) => {
+    const placa = e.target.closest(".ev-plate");
+    if (placa) { abrirDetalle(placa.dataset.placa); return; }
+    const imagen = e.target.closest(".ev-img");
+    if (imagen) { el.lightboxImg.src = imagen.dataset.src; el.lightbox.showModal(); }
+  });
+
+  // Reportes
+  [el.repDesde, el.repHasta, el.repEstado].forEach((campo) => campo.addEventListener("change", actualizarReporte));
+  el.repFicha.addEventListener("click", abrirFicha);
+  el.repPlaca.addEventListener("keydown", (e) => { if (e.key === "Enter") abrirFicha(); });
+
   el.detalleCerrar.addEventListener("click", () => el.detalle.close());
   el.detalle.addEventListener("click", (e) => { if (e.target === el.detalle) el.detalle.close(); });
 

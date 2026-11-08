@@ -48,6 +48,15 @@
           <span>Vehículos registrados</span>
         </a>
 
+        <a class="side-link" href="#evidencias" data-view="evidencias">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="10.5" r="1.7" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 17l4.5-4 3.5 3 3-2.5 4 3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Evidencias</span>
+        </a>
+        <a class="side-link" href="#reportes" data-view="reportes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7l4 4V20a.5.5 0 01-.5.5h-10.5a.5.5 0 01-.5-.5V4a.5.5 0 01.5-.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3.5V8h4M9 12.5h6M9 16h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Reportes</span>
+        </a>
+
         <p class="side-group">Ayuda</p>
         <a class="side-link" href="#acerca" data-view="acerca">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11v5M12 8v.01" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
@@ -277,6 +286,81 @@
           <section class="panel">
             <div class="empty empty--sm" id="vehVacio" hidden><p></p></div>
             <ul id="vehLista" class="veh-list"></ul>
+          </section>
+        </section>
+
+        <!-- ---------- Vista: evidencias ---------- -->
+        <section class="view" data-view="evidencias" aria-labelledby="t-evidencias" hidden>
+          <header class="view-head">
+            <div>
+              <h1 id="t-evidencias">Evidencias</h1>
+              <p class="view-desc">Imágenes analizadas por el sistema, con las placas que se detectaron en cada una.</p>
+            </div>
+            <label class="search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="search" id="evFiltro" placeholder="Buscar placa" aria-label="Buscar placa en las evidencias" autocomplete="off">
+            </label>
+          </header>
+
+          <div class="chips" id="evChips" role="group" aria-label="Filtrar por estado">
+            <button type="button" class="chip is-on" data-estado="todos" aria-pressed="true">Todas <b>0</b></button>
+            <button type="button" class="chip chip--alert" data-estado="alertas" aria-pressed="false">Con alertas <b>0</b></button>
+            <button type="button" class="chip" data-estado="normal" aria-pressed="false">Normal <b>0</b></button>
+            <button type="button" class="chip" data-estado="sin_registro" aria-pressed="false">Sin registro <b>0</b></button>
+            <button type="button" class="chip" data-estado="invalidas" aria-pressed="false">No válidas <b>0</b></button>
+          </div>
+
+          <div class="empty empty--sm panel" id="evVacio" hidden><p>Todavía no hay imágenes guardadas. Analiza una imagen para empezar.</p></div>
+          <div class="ev-grid" id="evGrid"></div>
+          <p class="ev-nota" id="evNota"></p>
+        </section>
+
+        <!-- ---------- Vista: reportes ---------- -->
+        <section class="view" data-view="reportes" aria-labelledby="t-reportes" hidden>
+          <header class="view-head">
+            <div>
+              <h1 id="t-reportes">Reportes</h1>
+              <p class="view-desc">Resumen de un período y exportación de las lecturas para anexarlas como evidencia.</p>
+            </div>
+          </header>
+
+          <section class="panel" aria-labelledby="rep-periodo">
+            <h2 class="panel-title" id="rep-periodo">Lecturas del período</h2>
+            <div class="rep-form">
+              <label class="campo"><span>Desde</span><input type="date" id="repDesde"></label>
+              <label class="campo"><span>Hasta</span><input type="date" id="repHasta"></label>
+              <label class="campo"><span>Estado</span>
+                <select id="repEstado">
+                  <option value="todos">Todos</option>
+                  <option value="alertas">Alertas</option>
+                  <option value="normal">Normal</option>
+                  <option value="sin_registro">Sin registro</option>
+                  <option value="invalidas">No válidas</option>
+                </select>
+              </label>
+            </div>
+            <div class="kpis" role="group" aria-label="Resumen del período">
+              <div class="kpi"><span>Lecturas</span><b id="repLecturas">—</b></div>
+              <div class="kpi"><span>Placas distintas</span><b id="repPlacas">—</b></div>
+              <div class="kpi kpi--alert"><span>Alertas</span><b id="repAlertas">—</b></div>
+              <div class="kpi"><span>Lecturas no válidas</span><b id="repNoValidas">—</b></div>
+            </div>
+            <div class="actions">
+              <a class="btn btn-primary" id="repCsv" href="/api/reportes/lecturas.csv" download>Descargar CSV</a>
+            </div>
+            <p class="det-note">Si dejas las fechas vacías se exporta todo el historial. El archivo se abre en Excel y trae fecha, placa, estado, datos del vehículo, confianzas y método de lectura.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="rep-ficha" style="margin-top:20px">
+            <h2 class="panel-title" id="rep-ficha">Ficha de una placa</h2>
+            <p class="view-desc">Hoja con los datos del vehículo, todas sus lecturas y las fotos. Usa «Imprimir» del navegador para guardarla como PDF.</p>
+            <div class="rep-ficha">
+              <label class="search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <input type="text" id="repPlaca" placeholder="Ej. ABC-123" aria-label="Placa para la ficha" autocomplete="off" maxlength="10">
+              </label>
+              <button type="button" class="btn btn-primary" id="repFicha">Abrir ficha</button>
+            </div>
           </section>
         </section>
 

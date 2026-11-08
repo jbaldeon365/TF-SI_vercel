@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ficha de placa {{ placa }} · CERCO IA</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, Arial, sans-serif; color: #0f172a; background: #eef2f7; line-height: 1.5; }
+    .hoja { width: min(900px, 100%); margin: 24px auto; background: #fff; padding: 36px 40px; border-radius: 10px; box-shadow: 0 10px 30px rgba(15, 23, 42, .12); }
+    header.cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 22px; }
+    .marca { font-weight: 700; letter-spacing: .14em; font-size: 1.05rem; }
+    .marca b { color: #0891b2; }
+    .sub { color: #475569; font-size: .85rem; margin-top: 2px; }
+    .btn { font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 8px; padding: 9px 16px; background: #0891b2; color: #fff; }
+    h1 { font-size: 1.25rem; margin: 0 0 12px; }
+    .placa-grande { display: inline-flex; flex-direction: column; align-items: center; border: 2px solid #0f172a; border-radius: 8px; padding: 2px 22px 6px; font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: .08em; }
+    .placa-grande small { font-size: .55rem; letter-spacing: .34em; color: #b91c1c; }
+    .placa-grande span { font-size: 2rem; line-height: 1.1; }
+    .bloque { margin-top: 24px; }
+    .bloque h2 { font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: #475569; margin: 0 0 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+    th { background: #f1f5f9; font-weight: 600; }
+    .datos td:first-child { width: 28%; color: #475569; background: #f8fafc; }
+    .estado { display: inline-block; font-weight: 700; font-size: .78rem; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; }
+    .e-robado { color: #b91c1c; } .e-denunciado { color: #c2410c; } .e-sospechoso { color: #b45309; }
+    .e-normal { color: #15803d; } .e-desconocido { color: #1d4ed8; } .e-invalida { color: #6d28d9; }
+    td img { width: 120px; height: 80px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1; display: block; }
+    .vacio { color: #64748b; font-style: italic; }
+    footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: .78rem; }
+    @media print {
+      body { background: #fff; }
+      .hoja { box-shadow: none; margin: 0; padding: 0; width: 100%; border-radius: 0; }
+      .btn { display: none; }
+      tr { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="hoja">
+    <header class="cab">
+      <div>
+        <div class="marca">CERCO <b>IA</b></div>
+        <div class="sub">Ficha de placa · generada el {{ generado }}</div>
+      </div>
+      <button class="btn" type="button" onclick="window.print()">Imprimir / Guardar PDF</button>
+    </header>
+
+    <h1>Placa</h1>
+    <div class="placa-grande"><small>PERÚ</small><span>{{ placa }}</span></div>
+
+    <section class="bloque">
+      <h2>Vehículo registrado</h2>
+      {% if vehiculo %}
+      <table class="datos">
+        <tr><td>Marca</td><td>{{ vehiculo.marca or "—" }}</td></tr>
+        <tr><td>Modelo</td><td>{{ vehiculo.modelo or "—" }}</td></tr>
+        <tr><td>Color</td><td>{{ vehiculo.color or "—" }}</td></tr>
+        <tr><td>Estado en la lista</td><td><span class="estado e-{{ vehiculo.estado }}">{{ estado_vehiculo }}</span></td></tr>
+        <tr><td>Descripción</td><td>{{ vehiculo.descripcion or "—" }}</td></tr>
+      </table>
+      {% else %}
+      <p class="vacio">Esta placa no está en la lista de vehículos registrados.</p>
+      {% endif %}
+    </section>
+
+    <section class="bloque">
+      <h2>Resumen de lecturas</h2>
+      {% if total %}
+      <table class="datos">
+        <tr><td>Lecturas guardadas</td><td>{{ total }}</td></tr>
+        <tr><td>Primera lectura</td><td>{{ primera }}</td></tr>
+        <tr><td>Última lectura</td><td>{{ ultima }}</td></tr>
+        <tr><td>Estados observados</td><td>{{ estados }}</td></tr>
+      </table>
+      {% else %}
+      <p class="vacio">No hay lecturas guardadas de esta placa.</p>
+      {% endif %}
+    </section>
+
+    {% if lecturas %}
+    <section class="bloque">
+      <h2>Detalle de las lecturas{% if total > lecturas|length %} (las {{ lecturas|length }} más recientes){% endif %}</h2>
+      <table>
+        <thead>
+          <tr><th>Fecha y hora</th><th>Estado</th><th>Detección</th><th>Lectura</th><th>Método</th><th>Imagen</th></tr>
+        </thead>
+        <tbody>
+          {% for l in lecturas %}
+          <tr>
+            <td>{{ l.fecha }}</td>
+            <td><span class="estado e-{{ l.estado }}">{{ l.estado_txt }}</span></td>
+            <td>{{ l.confianza }}</td>
+            <td>{{ l.confianza_ocr }}</td>
+            <td>{{ l.metodo }}</td>
+            <td>{% if l.imagen %}<img src="{{ l.imagen }}" alt="Imagen analizada">{% else %}<span class="vacio">Sin imagen</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <footer>
+      Prototipo académico. Una coincidencia es una ayuda para el operador: debe verificarse contra la imagen antes de actuar.
+    </footer>
+  </main>
+</body>
+</html>

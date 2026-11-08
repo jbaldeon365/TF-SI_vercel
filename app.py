@@ -1,6 +1,8 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, Response, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO
 from werkzeug.utils import secure_filename
+import csv
+import io
 import os
 import re
 import shutil
@@ -85,6 +87,15 @@ def listar_vehiculos():
     return jsonify({"vehiculos": cargar_vehiculos()})
 
 ESTADOS_ALERTA = ["robado", "denunciado", "sospechoso"]
+
+ETIQUETAS_ESTADO = {
+    "robado": "Robado", "denunciado": "Denunciado", "sospechoso": "Sospechoso",
+    "normal": "Sin incidencias", "desconocido": "Sin registro", "invalida": "Lectura no válida",
+}
+METODOS = {
+    "yolo": "Detección directa", "yolo_superresolucion": "Con superresolución",
+    "ocr_imagen_completa": "Lectura de imagen completa",
+}
 
 # Fichas del registro -> estados que agrupan ("todos" no filtra)
 FILTROS_ESTADO = {
@@ -183,6 +194,174 @@ def panel():
     except Exception as e:
         print(f"Error armando el panel: {e}")
         return jsonify({"success": False, "error": "No se pudo leer el panel."}), 500
+
+
+# Categoría de ficha a la que pertenece cada estado
+CATEGORIA_ESTADO = {"normal": "normal", "desconocido": "sin_registro", "invalida": "invalidas",
+                    **{e: "alertas" for e in ESTADOS_ALERTA}}
+
+
+def _a_local(fecha, formato="%d/%m/%Y %H:%M:%S"):
+    return fecha.replace(tzinfo=timezone.utc).astimezone().strftime(formato) if fecha else ""
+
+
+def _filtro_lecturas():
+    # Filtro de lecturas por rango de fechas (día local) y por estado
+    filtro = {}
+    rango = {}
+    try:
+        desde, hasta = request.args.get("desde", ""), request.args.get("hasta", "")
+        if desde:
+            rango["$gte"] = datetime.strptime(desde, "%Y-%m-%d").astimezone().astimezone(timezone.utc)
+        if hasta:
+            rango["$lt"] = (datetime.strptime(hasta, "%Y-%m-%d") + timedelta(days=1)).astimezone().astimezone(timezone.utc)
+    except ValueError:
+        rango = {}
+    if rango:
+        filtro["fecha"] = rango
+    permitidos = FILTROS_ESTADO.get(request.args.get("estado", ""))
+    if permitidos:
+        filtro["estado"] = {"$in": permitidos}
+    return filtro
+
+
+def _celda(valor):
+    # Evita que Excel interprete un texto como fórmula
+    if valor is None:
+        return ""
+    if isinstance(valor, str) and valor[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + valor
+    return valor
+
+
+@app.route("/api/evidencias")
+def evidencias():
+    # Imágenes analizadas (una por análisis) con las placas que salieron en cada una
+    try:
+        det = obtener_db().detecciones
+        buscado = re.sub(r"[^A-Z0-9]", "", request.args.get("q", "").upper())
+        grupos = list(det.aggregate([
+            {"$match": {"imagen_anotada": {"$ne": None}}},
+            {"$sort": {"fecha": -1}},
+            {"$group": {
+                "_id": "$analisis_id", "fecha": {"$first": "$fecha"},
+                "imagen": {"$first": "$imagen_anotada"}, "original": {"$first": "$imagen_original"},
+                "placas": {"$push": {"placa": "$placa", "placa_norm": "$placa_norm",
+                                     "estado": "$estado", "valida": "$valida"}},
+            }},
+            {"$sort": {"fecha": -1}},
+            {"$limit": 500},
+        ]))
+        if buscado:
+            grupos = [g for g in grupos if any(buscado in (p.get("placa_norm") or "") for p in g["placas"])]
+
+        conteos = {"todos": len(grupos), "alertas": 0, "normal": 0, "sin_registro": 0, "invalidas": 0}
+        for g in grupos:
+            g["categorias"] = {CATEGORIA_ESTADO.get(p.get("estado")) for p in g["placas"]}
+            for categoria in g["categorias"]:
+                if categoria in conteos:
+                    conteos[categoria] += 1
+
+        estado = request.args.get("estado", "")
+        if estado in FILTROS_ESTADO:
+            grupos = [g for g in grupos if estado in g["categorias"]]
+
+        items = [{
+            "analisis_id": g["_id"],
+            "fecha": _iso(g["fecha"]),
+            "imagen": f"/capturas/{g['imagen']}",
+            "original": f"/capturas/{g['original']}" if g.get("original") else None,
+            "placas": g["placas"],
+        } for g in grupos[:48]]
+        return jsonify({"success": True, "items": items, "total": len(grupos), "conteos": conteos})
+    except Exception as e:
+        print(f"Error leyendo las evidencias: {e}")
+        return jsonify({"success": False, "error": "No se pudieron leer las evidencias."}), 500
+
+
+@app.route("/api/reportes/resumen")
+def reporte_resumen():
+    try:
+        det = obtener_db().detecciones
+        filtro = _filtro_lecturas()
+        por_estado = {x["_id"]: x["n"] for x in det.aggregate([
+            {"$match": filtro}, {"$group": {"_id": "$estado", "n": {"$sum": 1}}},
+        ])}
+        lecturas = sum(por_estado.values())
+        no_validas = por_estado.get("invalida", 0)
+        return jsonify({
+            "success": True,
+            "lecturas": lecturas,
+            "placas": len(det.distinct("placa_norm", filtro)),
+            "imagenes": len(det.distinct("analisis_id", filtro)),
+            "alertas": sum(por_estado.get(e, 0) for e in ESTADOS_ALERTA),
+            "no_validas": no_validas,
+            "pct_no_validas": round(no_validas * 100 / lecturas, 1) if lecturas else 0,
+        })
+    except Exception as e:
+        print(f"Error armando el resumen: {e}")
+        return jsonify({"success": False, "error": "No se pudo armar el resumen."}), 500
+
+
+@app.route("/api/reportes/lecturas.csv")
+def reporte_csv():
+    try:
+        filas = obtener_db().detecciones.find(_filtro_lecturas(), {"_id": 0}).sort("fecha", -1).limit(20000)
+        salida = io.StringIO()
+        escritor = csv.writer(salida)
+        escritor.writerow(["fecha_hora", "placa", "estado", "placa_valida", "pais", "marca", "modelo", "color",
+                           "color_estimado", "descripcion", "confianza_deteccion", "confianza_lectura", "metodo"])
+        for d in filas:
+            escritor.writerow([_celda(x) for x in [
+                _a_local(d.get("fecha"), "%Y-%m-%d %H:%M:%S"), d.get("placa"),
+                ETIQUETAS_ESTADO.get(d.get("estado"), d.get("estado")),
+                "sí" if d.get("valida", True) else "no", d.get("pais"), d.get("marca"), d.get("modelo"),
+                d.get("color"), d.get("color_estimado"), d.get("descripcion"),
+                d.get("confianza"), d.get("confianza_ocr"), METODOS.get(d.get("metodo"), d.get("metodo")),
+            ]])
+        nombre = f"cerco_ia_lecturas_{datetime.now():%Y%m%d_%H%M}.csv"
+        # El BOM hace que Excel abra bien las tildes
+        return Response("﻿" + salida.getvalue(), mimetype="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+    except Exception as e:
+        print(f"Error exportando el CSV: {e}")
+        return jsonify({"success": False, "error": "No se pudo exportar."}), 500
+
+
+@app.route("/reportes/placa/<placa_norm>")
+def ficha_placa(placa_norm):
+    # Hoja imprimible con el vehículo, el resumen y todas las lecturas de una placa
+    placa_norm = re.sub(r"[^A-Z0-9]", "", placa_norm.upper())[:12]
+    try:
+        db = obtener_db()
+        lecturas_db = list(db.detecciones.find({"placa_norm": placa_norm}, {"_id": 0}).sort("fecha", -1))
+        vehiculo = db.vehiculos.find_one({"placa_norm": placa_norm}, {"_id": 0})
+    except Exception as e:
+        print(f"Error armando la ficha: {e}")
+        return "No se pudo armar la ficha.", 500
+
+    pct = lambda v: f"{round(v * 100)} %" if v is not None else "—"
+    lecturas = [{
+        "fecha": _a_local(l.get("fecha")),
+        "estado": l.get("estado"),
+        "estado_txt": ETIQUETAS_ESTADO.get(l.get("estado"), l.get("estado")),
+        "confianza": pct(l.get("confianza")),
+        "confianza_ocr": pct(l.get("confianza_ocr")),
+        "metodo": METODOS.get(l.get("metodo"), l.get("metodo") or "—"),
+        "imagen": f"/capturas/{l['imagen_anotada']}" if l.get("imagen_anotada") else None,
+    } for l in lecturas_db[:100]]
+
+    placa = f"{placa_norm[:4]}-{placa_norm[4:]}" if re.match(r"^\d{4}", placa_norm) and len(placa_norm) == 6 \
+        else f"{placa_norm[:3]}-{placa_norm[3:]}" if len(placa_norm) == 6 else placa_norm
+    estados = ", ".join(dict.fromkeys(ETIQUETAS_ESTADO.get(l.get("estado"), l.get("estado")) for l in lecturas_db))
+    return render_template(
+        "ficha.html", placa=placa, vehiculo=vehiculo,
+        estado_vehiculo=ETIQUETAS_ESTADO.get(vehiculo["estado"], vehiculo["estado"]) if vehiculo else "",
+        total=len(lecturas_db), lecturas=lecturas,
+        primera=_a_local(lecturas_db[-1].get("fecha")) if lecturas_db else "",
+        ultima=_a_local(lecturas_db[0].get("fecha")) if lecturas_db else "",
+        estados=estados, generado=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
 
 
 @app.route("/api/estado")
