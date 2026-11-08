@@ -336,7 +336,12 @@ kbd {
 }
 .card-plate { margin: 14px 0 12px; }
 
-.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0 2px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin: 10px 0 2px; }
+.fact .na { color: var(--dim); font-style: normal; font-weight: 500; }
+.fact .est {
+  font-style: normal; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 700;
+  color: var(--accent); border: 1px solid rgba(34, 211, 238, .4); border-radius: 999px; padding: 1px 6px; margin-left: 4px; vertical-align: middle;
+}
 .fact span { display: block; font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
 .fact b { font-size: .95rem; font-weight: 600; }
 .card-desc { margin-top: 10px; color: var(--muted); font-size: .92rem; }
@@ -391,6 +396,40 @@ kbd {
 }
 .rep--change { color: #fbbf24; background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .5); font-family: var(--font); font-size: .7rem; }
 
+.log-list li.is-click { cursor: pointer; transition: border-color .15s, background .15s; }
+.log-list li.is-click:hover { border-color: var(--line-2); background: #17263f; }
+
+/* ===== Detalle de una placa ===== */
+dialog.detalle {
+  width: min(920px, 94vw); max-height: 92vh; overflow: auto; padding: 26px;
+  border: 1px solid var(--line-2); border-radius: 18px; color: var(--text);
+  background: linear-gradient(180deg, var(--panel), var(--bg-2));
+}
+dialog.detalle::backdrop { background: rgba(2, 5, 12, .82); backdrop-filter: blur(3px); }
+.det-title { font-size: 1.15rem; margin-bottom: 18px; padding-right: 40px; }
+.det-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 22px; align-items: start; }
+.det-media { display: grid; gap: 10px; }
+.det-zoom img { height: 320px; }
+.det-toggle { display: flex; gap: 8px; }
+.chip-btn.is-on { background: rgba(34, 211, 238, .14); border-color: var(--accent); color: var(--accent); }
+.det-noimg { border: 1px dashed var(--line-2); border-radius: 12px; padding: 40px 20px; text-align: center; color: var(--dim); font-size: .9rem; }
+.det-data { display: grid; gap: 14px; }
+.det-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.det-rows { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.det-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; background: var(--panel-2); font-size: .88rem; }
+.det-row span { color: var(--muted); }
+.det-row b { font-weight: 600; text-align: right; }
+.det-note { font-size: .78rem; color: var(--dim); }
+.det-hist { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.det-hist p { font-size: .84rem; color: var(--muted); margin-bottom: 10px; }
+.det-hist-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.hist-btn {
+  font: inherit; font-size: .78rem; cursor: pointer; color: var(--text); background: var(--panel-2);
+  border: 1px solid var(--line-2); border-left: 3px solid var(--tone); border-radius: 8px; padding: 6px 11px;
+}
+.hist-btn:hover { border-color: var(--accent-2); }
+.hist-btn.is-on { background: rgba(34, 211, 238, .12); border-color: var(--accent); }
+
 /* ===== Pie, lightbox, toast ===== */
 
 dialog#lightbox {
@@ -417,6 +456,10 @@ dialog#lightbox img { max-width: 100%; max-height: calc(92vh - 24px); border-rad
 /* ===== Responsive ===== */
 @media (max-width: 1100px) {
   .lab-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .det-grid { grid-template-columns: 1fr; }
+  dialog.detalle { padding: 18px; }
 }
 @media (max-width: 960px) {
   .app { grid-template-columns: 1fr; }

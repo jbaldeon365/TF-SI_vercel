@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 import os
+import shutil
 import uuid
 from datetime import datetime, timezone
 from detector import detect_plate, TEMP_DIR
@@ -12,6 +13,10 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 # Ancho mínimo (px) del recuadro de una placa para poder leerla
 ANCHO_PLACA_LEGIBLE = 80
 
+# Imágenes de cada análisis, para consultarlas desde el historial (no se versionan)
+CAPTURAS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "capturas")
+os.makedirs(CAPTURAS_DIR, exist_ok=True)
+
 def cargar_vehiculos():
     # Vehículos de interés guardados en MongoDB (sin el _id interno)
     return list(obtener_db().vehiculos.find({}, {"_id": 0, "placa_norm": 0}))
@@ -21,14 +26,30 @@ def buscar_vehiculo(placa):
     return obtener_db().vehiculos.find_one({"placa_norm": normalizar_placa(placa)}, {"_id": 0})
 
 
-def guardar_detecciones(resultados):
-    # Cada lectura se guarda como evidencia; el historial las agrupa por placa.
+def archivar_capturas(filepath, annotated_path, analisis_id):
+    # Copia la imagen original y la anotada a una carpeta permanente (TEMP se limpia)
+    original = anotada = None
+    try:
+        extension = os.path.splitext(filepath)[1].lower() or ".jpg"
+        original = f"{analisis_id}_original{extension}"
+        shutil.copyfile(filepath, os.path.join(CAPTURAS_DIR, original))
+        if annotated_path:
+            anotada = f"{analisis_id}_anotada.jpg"
+            shutil.copyfile(annotated_path, os.path.join(CAPTURAS_DIR, anotada))
+    except Exception as e:
+        print(f"No se pudieron archivar las imágenes: {e}")
+    return original, anotada
+
+
+def guardar_detecciones(resultados, analisis_id, imagen_original, imagen_anotada):
+    # Cada lectura se guarda completa como evidencia; el historial las agrupa por placa.
     # El historial no debe impedir que el análisis responda si la base falla
     try:
         ahora = datetime.now(timezone.utc)
-        analisis_id = uuid.uuid4().hex  # agrupa las placas de una misma imagen
         documentos = [{
-            "analisis_id": analisis_id,
+            "analisis_id": analisis_id,  # agrupa las placas de una misma imagen
+            "imagen_original": imagen_original,
+            "imagen_anotada": imagen_anotada,
             "placa": r["placa"],
             "placa_norm": normalizar_placa(r["placa"]),
             "estado": r["estado"],
@@ -38,6 +59,13 @@ def guardar_detecciones(resultados):
             "confianza": r.get("confianza"),
             "confianza_ocr": r.get("confianza_ocr"),
             "metodo": r.get("metodo"),
+            "pais": r.get("pais"),
+            "marca": r.get("marca"),
+            "modelo": r.get("modelo"),
+            "color": r.get("color"),
+            "color_estimado": r.get("color_estimado"),
+            "descripcion": r.get("descripcion"),
+            "bbox": r.get("bbox"),
         } for r in resultados]
         if documentos:
             obtener_db().detecciones.insert_many(documentos)
@@ -65,6 +93,7 @@ def historial():
             {"$sort": {"fecha": -1}},
             {"$group": {
                 "_id": "$placa_norm",
+                "placa_norm": {"$first": "$placa_norm"},
                 "placa": {"$first": "$placa"},
                 "estado": {"$first": "$estado"},
                 "valida": {"$first": "$valida"},
@@ -93,15 +122,42 @@ def historial():
         return jsonify({"success": False, "error": "No se pudo leer el historial."}), 500
 
 
+@app.route("/api/historial/<placa_norm>")
+def detalle_placa(placa_norm):
+    # Todas las lecturas de una placa, la más reciente primero, con lo que se mostró en cada una
+    try:
+        lecturas = list(obtener_db().detecciones
+                        .find({"placa_norm": placa_norm}, {"_id": 0, "analisis_id": 0})
+                        .sort("fecha", -1).limit(20))
+        for l in lecturas:
+            fecha = l.get("fecha")
+            l["fecha"] = fecha.replace(tzinfo=timezone.utc).isoformat() if fecha else None
+            for campo, url in (("imagen_original", "url_original"), ("imagen_anotada", "url_anotada")):
+                l[url] = f"/capturas/{l[campo]}" if l.get(campo) else None
+        return jsonify({"success": True, "lecturas": lecturas})
+    except Exception as e:
+        print(f"Error leyendo el detalle: {e}")
+        return jsonify({"success": False, "error": "No se pudo leer el detalle."}), 500
+
+
 @app.route("/api/historial", methods=["DELETE"])
 def vaciar_historial():
     try:
         obtener_db().detecciones.delete_many({})
+        for nombre in os.listdir(CAPTURAS_DIR):  # las imágenes del historial se borran con él
+            try:
+                os.remove(os.path.join(CAPTURAS_DIR, nombre))
+            except OSError:
+                pass
         return jsonify({"success": True})
     except Exception as e:
         print(f"Error vaciando el historial: {e}")
         return jsonify({"success": False, "error": "No se pudo vaciar el historial."}), 500
 
+
+@app.route("/capturas/<filename>")
+def captura(filename):
+    return send_from_directory(CAPTURAS_DIR, filename)
 
 @app.route("/temp_files/<filename>")
 def temp_file(filename):
@@ -150,6 +206,7 @@ def upload_image():
                 "confianza_ocr": d["confianza_ocr"],
                 "bbox": d["bbox"],
                 "metodo": d["metodo"],
+                "color_estimado": d.get("color_estimado"),
             }
 
             if not validacion["valida"]:
@@ -200,7 +257,9 @@ def upload_image():
                     **deteccion
                 })
 
-        guardar_detecciones(resultados)
+        analisis_id = uuid.uuid4().hex
+        imagen_original, imagen_anotada = archivar_capturas(filepath, annotated_path, analisis_id)
+        guardar_detecciones(resultados, analisis_id, imagen_original, imagen_anotada)
 
         annotated_filename = os.path.basename(annotated_path) if annotated_path else None
 

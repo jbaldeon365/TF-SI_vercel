@@ -6,8 +6,10 @@ import os
 import imutils
 import platform
 import time
+import numpy as np
 
 from placas import corregir_confusiones, validar_placa
+from colores import color_dominante
 
 
 #  CONFIG: Usar el modelo empaquetado dentro del contenedor
@@ -59,6 +61,62 @@ def cargar_superresolucion():
 superres = cargar_superresolucion()
 
 
+# Detector general (COCO) para ubicar el vehículo y estimar su color
+VEHICULOS_MODELO = os.path.join(os.path.dirname(__file__), "yolo11n.pt")
+CLASES_VEHICULO = [2, 3, 5, 7]  # auto, moto, bus, camión
+_modelo_vehiculos = None
+_modelo_vehiculos_fallo = False
+
+
+def cargar_modelo_vehiculos():
+    # Carga perezosa: si el modelo no está o no se puede descargar, el color simplemente no se estima
+    global _modelo_vehiculos, _modelo_vehiculos_fallo
+    if _modelo_vehiculos is None and not _modelo_vehiculos_fallo:
+        try:
+            _modelo_vehiculos = YOLO(VEHICULOS_MODELO)
+        except Exception as e:
+            _modelo_vehiculos_fallo = True
+            print(f"[detector] estimación de color no disponible: {e}")
+    return _modelo_vehiculos
+
+
+def cajas_vehiculos(imagen):
+    modelo = cargar_modelo_vehiculos()
+    if modelo is None:
+        return []
+    try:
+        resultado = modelo(imagen, classes=CLASES_VEHICULO, conf=0.25, verbose=False)[0]
+        return [tuple(map(int, caja)) for caja in resultado.boxes.xyxy.tolist()]
+    except Exception as e:
+        print(f"[detector] no se pudo ubicar el vehículo: {e}")
+        return []
+
+
+def estimar_color(imagen, cajas, bbox_placa):
+    # Color dominante de la carrocería del vehículo que contiene la placa (None si no se puede)
+    cx, cy = (bbox_placa[0] + bbox_placa[2]) / 2, (bbox_placa[1] + bbox_placa[3]) / 2
+    candidatas = [c for c in cajas if c[0] <= cx <= c[2] and c[1] <= cy <= c[3]]
+    if not candidatas:
+        return None
+    x1, y1, x2, y2 = min(candidatas, key=lambda c: (c[2] - c[0]) * (c[3] - c[1]))
+    ancho, alto = x2 - x1, y2 - y1
+    # Zona de carrocería: sin los bordes laterales ni el techo / las llantas
+    zx1, zx2 = max(x1 + int(ancho * 0.10), 0), x2 - int(ancho * 0.10)
+    zy1, zy2 = max(y1 + int(alto * 0.20), 0), y2 - int(alto * 0.08)
+    zona = imagen[zy1:zy2, zx1:zx2]
+    if zona.size == 0:
+        return None
+
+    # Se excluye la placa (y un margen) para que no cuente como color del vehículo
+    margen = int((bbox_placa[2] - bbox_placa[0]) * 0.15)
+    mascara = np.ones(zona.shape[:2], dtype=bool)
+    mascara[max(bbox_placa[1] - margen - zy1, 0):max(bbox_placa[3] + margen - zy1, 0),
+            max(bbox_placa[0] - margen - zx1, 0):max(bbox_placa[2] + margen - zx1, 0)] = False
+
+    resultado = color_dominante(zona, mascara)
+    return resultado[0] if resultado else None
+
+
 def extraer_pares(resultado_ocr):
     # Pares (texto, confianza) que devuelve PaddleOCR por cada línea leída
     pares = []
@@ -95,7 +153,9 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
     if image is None:
         print(f"Error: No se pudo leer la imagen en {image_path}")
         return [], None, {}
-    
+
+    original = image.copy()  # sin recuadros ni texto, para estimar el color
+
     t_yolo_ini = time.time()
     results = model(image, conf=conf_thres, iou=iou_thres)  # YOLO inference
     t_yolo = time.time() - t_yolo_ini
@@ -246,6 +306,12 @@ def detect_plate(image_path, conf_thres=CONF_THRES, iou_thres=IOU_THRES):
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
             except:
                 pass
+
+    # Color estimado del vehículo de cada placa (sobre la imagen sin dibujos)
+    if detecciones:
+        cajas = cajas_vehiculos(original)
+        for d in detecciones:
+            d["color_estimado"] = estimar_color(original, cajas, d["bbox"])
 
     # Respaldo: si YOLO no encontró placas (por ejemplo una placa que llena toda la imagen),
     # se lee la imagen completa y solo se acepta un texto con formato de placa válido

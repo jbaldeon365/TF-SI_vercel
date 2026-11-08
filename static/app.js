@@ -60,6 +60,9 @@
     vehLista: $("#vehLista"),
     vehVacio: $("#vehVacio"),
     vehFiltro: $("#vehFiltro"),
+    detalle: $("#detalle"),
+    detalleCuerpo: $("#detalleCuerpo"),
+    detalleCerrar: $("#detalleCerrar"),
     lightbox: $("#lightbox"),
     lightboxImg: $("#lightboxImg"),
     lightboxClose: $("#lightboxClose"),
@@ -295,6 +298,25 @@
       </div>`;
   }
 
+  // Datos del vehículo: marca y modelo salen de la lista de vehículos (N/A si no está);
+  // el color detectado se estima de la imagen
+  function bloqueVehiculo(r) {
+    if (r.valida === false) return "";
+    const dato = (titulo, valor) =>
+      `<div class="fact"><span>${titulo}</span><b>${valor ? esc(valor) : '<i class="na">N/A</i>'}</b></div>`;
+    // Un solo campo de color: el registrado si existe; si no, el estimado de la imagen
+    const color = r.color
+      ? dato("Color", r.color)
+      : r.color_estimado
+        ? `<div class="fact"><span>Color</span><b>${esc(r.color_estimado)} <em class="est">estimado</em></b></div>`
+        : dato("Color", null);
+    return `<div class="facts">
+        ${dato("Marca", r.marca)}
+        ${dato("Modelo", r.modelo)}
+        ${color}
+      </div>`;
+  }
+
   function tarjeta(r) {
     const estado = estadoDe(r);
     const valida = r.valida !== false;
@@ -304,13 +326,7 @@
     if (r.pais) etiquetas.push(r.pais);
     if (r.metodo && METODOS[r.metodo]) etiquetas.push(METODOS[r.metodo]);
 
-    const datosVehiculo = r.encontrado
-      ? `<div class="facts">
-           <div class="fact"><span>Marca</span><b>${esc(r.marca || "—")}</b></div>
-           <div class="fact"><span>Modelo</span><b>${esc(r.modelo || "—")}</b></div>
-           <div class="fact"><span>Color</span><b>${esc(r.color || "—")}</b></div>
-         </div>`
-      : "";
+    const datosVehiculo = bloqueVehiculo(r);
 
     const medidor = (titulo, valor) => {
       if (valor == null) return "";
@@ -421,7 +437,7 @@
       const detalle = `Primera lectura: ${fechaCorta(f.primera)}
 Última lectura: ${fechaCorta(f.ultima)}`;
       return `
-      <li class="tone-${estado.tono}">
+      <li class="tone-${estado.tono} is-click" role="button" tabindex="0" data-placa="${esc(f.placa_norm || "")}" aria-label="Ver detalle de ${esc(f.placa || "la placa")}">
         <span class="log-time" title="Última lectura">${esc(fechaCorta(f.ultima))}</span>
         <span class="log-main">
           <span class="log-plate">${esc(formatoPlaca(f.placa, f.valida !== false) || "—")}</span>
@@ -431,6 +447,89 @@
         <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
       </li>`;
     }).join("");
+  }
+
+  // ---------- detalle de una placa ----------
+  let lecturasDetalle = [];
+  let indiceDetalle = 0;
+  let vistaImagen = "anotada";
+
+  async function abrirDetalle(placaNorm) {
+    if (!placaNorm) return;
+    try {
+      const respuesta = await fetch(`/api/historial/${encodeURIComponent(placaNorm)}`);
+      const json = await respuesta.json();
+      if (!json.success || !json.lecturas.length) throw new Error(json.error || "sin lecturas");
+      lecturasDetalle = json.lecturas;
+      indiceDetalle = 0;
+      vistaImagen = "anotada";
+      pintarDetalle();
+      if (!el.detalle.open) el.detalle.showModal();
+    } catch (error) {
+      console.error("No se pudo abrir el detalle:", error);
+      aviso("No se pudo cargar el detalle de la placa.", true);
+    }
+  }
+
+  function pintarDetalle() {
+    const l = lecturasDetalle[indiceDetalle];
+    const estado = estadoDe(l);
+    const valida = l.valida !== false;
+    const placa = formatoPlaca(l.placa, valida);
+    const url = (vistaImagen === "original" ? l.url_original : l.url_anotada) || l.url_anotada || l.url_original;
+    const pct = (v) => (v == null ? "—" : `${Math.round(v * 100)} %`);
+    const cuando = l.fecha
+      ? new Date(l.fecha).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "medium", hour12: false })
+      : "—";
+
+    const imagen = url
+      ? `<button type="button" class="zoomable det-zoom" aria-label="Ampliar imagen"><img src="${esc(url)}" alt="Imagen analizada de la placa ${esc(placa)}"></button>
+         <div class="det-toggle">
+           <button type="button" class="chip-btn ${vistaImagen === "anotada" ? "is-on" : ""}" data-vista="anotada">Detección</button>
+           <button type="button" class="chip-btn ${vistaImagen === "original" ? "is-on" : ""}" data-vista="original">Original</button>
+         </div>`
+      : `<div class="det-noimg">Esta lectura es anterior a la función de guardar imágenes, por eso no tiene foto.</div>`;
+
+    const hechos = bloqueVehiculo(l);
+
+    const filas = [
+      ["Fecha y hora", cuando],
+      ["País", l.pais || "—"],
+      ["Método de lectura", METODOS[l.metodo] || l.metodo || "—"],
+      ["Confianza de detección", pct(l.confianza)],
+      ["Confianza de lectura", pct(l.confianza_ocr)],
+    ].map(([k, v]) => `<div class="det-row"><span>${k}</span><b>${esc(v)}</b></div>`).join("");
+
+    const historial = lecturasDetalle.length > 1
+      ? `<div class="det-hist">
+           <p>Lecturas de esta placa (${lecturasDetalle.length})</p>
+           <div class="det-hist-list">
+             ${lecturasDetalle.map((x, i) => {
+               const e = estadoDe(x);
+               const f = x.fecha ? new Date(x.fecha).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }) : "—";
+               return `<button type="button" class="hist-btn tone-${e.tono} ${i === indiceDetalle ? "is-on" : ""}" data-i="${i}">${esc(f)} · ${esc(e.etiqueta)}</button>`;
+             }).join("")}
+           </div>
+         </div>`
+      : "";
+
+    el.detalleCuerpo.innerHTML = `
+      <h2 class="det-title" id="detTitulo">Detalle de la lectura</h2>
+      <div class="det-grid">
+        <div class="det-media">${imagen}</div>
+        <div class="det-data tone-${estado.tono}">
+          <div class="det-top">
+            <div class="plate ${valida ? "" : "plate--invalid"}">${valida ? "<small>PERÚ</small>" : ""}<span>${esc(placa || "—")}</span></div>
+            <span class="badge">${ICONOS[estado.icono]}${esc(estado.etiqueta)}</span>
+          </div>
+          ${hechos}
+          <p class="card-desc">${esc(l.descripcion || "")}</p>
+          <p class="det-note">Marca y modelo solo se conocen si la placa está en la lista de vehículos. Si el color no está en la lista, se estima a partir de la imagen.</p>
+          <div class="det-rows">${filas}</div>
+          <p class="det-note">Datos tal como se mostraron al momento del análisis.</p>
+        </div>
+      </div>
+      ${historial}`;
   }
 
   // ---------- eventos ----------
@@ -508,6 +607,29 @@
     }
     cargarHistorial();
   });
+
+  // Detalle de una placa del registro
+  el.logList.addEventListener("click", (e) => {
+    const fila = e.target.closest("li[data-placa]");
+    if (fila) abrirDetalle(fila.dataset.placa);
+  });
+  el.logList.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const fila = e.target.closest("li[data-placa]");
+    if (!fila) return;
+    e.preventDefault();
+    abrirDetalle(fila.dataset.placa);
+  });
+  el.detalleCuerpo.addEventListener("click", (e) => {
+    const vista = e.target.closest("[data-vista]");
+    const lectura = e.target.closest("[data-i]");
+    if (vista) { vistaImagen = vista.dataset.vista; pintarDetalle(); return; }
+    if (lectura) { indiceDetalle = Number(lectura.dataset.i); pintarDetalle(); return; }
+    const imagen = e.target.closest(".det-zoom img");
+    if (imagen) { el.lightboxImg.src = imagen.src; el.lightbox.showModal(); }
+  });
+  el.detalleCerrar.addEventListener("click", () => el.detalle.close());
+  el.detalle.addEventListener("click", (e) => { if (e.target === el.detalle) el.detalle.close(); });
 
   // Barra lateral y vistas
   window.addEventListener("hashchange", mostrarVista);
